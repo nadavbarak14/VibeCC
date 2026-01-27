@@ -1,0 +1,9 @@
+# CODEOWNERS file
+# These owners will be requested for review when someone opens a pull request.
+
+# Default owners for everything in the repo
+* @nadavbarak14
+
+# Specific paths can have different owners
+# /src/vibecc/core/ @core-team
+# /docs/ @docs-team
