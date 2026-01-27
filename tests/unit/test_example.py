@@ -2,7 +2,7 @@
 
 import pytest
 
-from vibecc import __version__
+from vibecc import __version__, get_version
 
 
 @pytest.mark.unit
@@ -17,3 +17,10 @@ def test_version_format():
     parts = __version__.split(".")
     assert len(parts) == 3
     assert all(part.isdigit() for part in parts)
+
+
+@pytest.mark.unit
+def test_get_version():
+    """Verify get_version returns the correct version."""
+    assert get_version() == __version__
+    assert get_version() == "0.1.0"

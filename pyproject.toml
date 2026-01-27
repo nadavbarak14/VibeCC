@@ -58,11 +58,10 @@ filterwarnings = [
 
 # Coverage configuration
 [tool.coverage.run]
-source = ["src/vibecc"]
+source = ["vibecc"]
 branch = true
 omit = [
     "tests/*",
-    "*/__init__.py",
 ]
 
 [tool.coverage.report]
