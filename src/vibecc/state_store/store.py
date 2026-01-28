@@ -7,6 +7,8 @@ from sqlalchemy.exc import IntegrityError
 
 from vibecc.state_store.database import Database
 from vibecc.state_store.exceptions import (
+    PipelineExistsError,
+    PipelineNotFoundError,
     ProjectExistsError,
     ProjectHasActivePipelinesError,
     ProjectNotFoundError,
@@ -221,6 +223,214 @@ class StateStore:
                 raise ProjectHasActivePipelinesError(f"Project '{project_id}' has active pipelines")
 
             session.delete(project)
+            session.commit()
+        finally:
+            session.close()
+
+    # --- Pipeline Operations ---
+
+    def create_pipeline(
+        self,
+        project_id: str,
+        ticket_id: str,
+        ticket_title: str,
+        branch_name: str,
+        ticket_body: str = "",
+    ) -> Pipeline:
+        """Create a new pipeline.
+
+        Args:
+            project_id: The project's unique ID
+            ticket_id: The ticket/issue ID
+            ticket_title: Title of the ticket
+            branch_name: Git branch name for this pipeline
+            ticket_body: Body/description of the ticket
+
+        Returns:
+            Created Pipeline object with generated ID
+
+        Raises:
+            ProjectNotFoundError: If project doesn't exist
+            PipelineExistsError: If pipeline for this ticket already exists in project
+        """
+        session = self._db.get_session()
+        try:
+            # Verify project exists
+            project = session.get(Project, project_id)
+            if project is None:
+                raise ProjectNotFoundError(f"Project with id '{project_id}' not found")
+
+            # Check for duplicate ticket in same project
+            stmt = select(Pipeline).where(
+                Pipeline.project_id == project_id,
+                Pipeline.ticket_id == ticket_id,
+            )
+            existing = session.execute(stmt).scalar_one_or_none()
+            if existing is not None:
+                raise PipelineExistsError(
+                    f"Pipeline for ticket '{ticket_id}' already exists in project '{project_id}'"
+                )
+
+            pipeline = Pipeline(
+                project_id=project_id,
+                ticket_id=ticket_id,
+                ticket_title=ticket_title,
+                branch_name=branch_name,
+                ticket_body=ticket_body,
+            )
+            session.add(pipeline)
+            session.commit()
+            session.refresh(pipeline)
+            return pipeline
+        finally:
+            session.close()
+
+    def get_pipeline(self, pipeline_id: str) -> Pipeline:
+        """Get pipeline by ID.
+
+        Args:
+            pipeline_id: The pipeline's unique ID
+
+        Returns:
+            The Pipeline object
+
+        Raises:
+            PipelineNotFoundError: If pipeline doesn't exist
+        """
+        session = self._db.get_session()
+        try:
+            pipeline = session.get(Pipeline, pipeline_id)
+            if pipeline is None:
+                raise PipelineNotFoundError(f"Pipeline with id '{pipeline_id}' not found")
+            return pipeline
+        finally:
+            session.close()
+
+    def get_pipeline_by_ticket(self, project_id: str, ticket_id: str) -> Pipeline:
+        """Get pipeline by project and ticket ID.
+
+        Args:
+            project_id: The project's unique ID
+            ticket_id: The ticket/issue ID
+
+        Returns:
+            The Pipeline object
+
+        Raises:
+            PipelineNotFoundError: If pipeline doesn't exist
+        """
+        session = self._db.get_session()
+        try:
+            stmt = select(Pipeline).where(
+                Pipeline.project_id == project_id,
+                Pipeline.ticket_id == ticket_id,
+            )
+            pipeline = session.execute(stmt).scalar_one_or_none()
+            if pipeline is None:
+                raise PipelineNotFoundError(
+                    f"Pipeline for ticket '{ticket_id}' not found in project '{project_id}'"
+                )
+            return pipeline
+        finally:
+            session.close()
+
+    def list_pipelines(
+        self,
+        project_id: str | None = None,
+        state: PipelineState | None = None,
+    ) -> list[Pipeline]:
+        """List pipelines with optional filters.
+
+        Args:
+            project_id: Filter by project ID (optional)
+            state: Filter by pipeline state (optional)
+
+        Returns:
+            List of pipelines, ordered by created_at descending (most recent first)
+        """
+        session = self._db.get_session()
+        try:
+            stmt = select(Pipeline)
+
+            if project_id is not None:
+                stmt = stmt.where(Pipeline.project_id == project_id)
+            if state is not None:
+                stmt = stmt.where(Pipeline.state == state.value)
+
+            stmt = stmt.order_by(Pipeline.created_at.desc())
+            result = session.execute(stmt)
+            return list(result.scalars().all())
+        finally:
+            session.close()
+
+    def update_pipeline(
+        self,
+        pipeline_id: str,
+        state: PipelineState | None = None,
+        pr_id: int | None = None,
+        pr_url: str | None = None,
+        retry_count_ci: int | None = None,
+        retry_count_review: int | None = None,
+        feedback: str | None = None,
+    ) -> Pipeline:
+        """Update pipeline fields. Only provided fields are updated.
+
+        Args:
+            pipeline_id: The pipeline's unique ID
+            state: New pipeline state (optional)
+            pr_id: PR number (optional)
+            pr_url: PR URL (optional)
+            retry_count_ci: CI retry count (optional)
+            retry_count_review: Review retry count (optional)
+            feedback: Feedback from CI/review failure (optional)
+
+        Returns:
+            The updated Pipeline object
+
+        Raises:
+            PipelineNotFoundError: If pipeline doesn't exist
+        """
+        session = self._db.get_session()
+        try:
+            pipeline = session.get(Pipeline, pipeline_id)
+            if pipeline is None:
+                raise PipelineNotFoundError(f"Pipeline with id '{pipeline_id}' not found")
+
+            if state is not None:
+                pipeline.state = state.value
+            if pr_id is not None:
+                pipeline.pr_id = pr_id
+            if pr_url is not None:
+                pipeline.pr_url = pr_url
+            if retry_count_ci is not None:
+                pipeline.retry_count_ci = retry_count_ci
+            if retry_count_review is not None:
+                pipeline.retry_count_review = retry_count_review
+            if feedback is not None:
+                pipeline.feedback = feedback
+
+            session.commit()
+            session.refresh(pipeline)
+            return pipeline
+        finally:
+            session.close()
+
+    def delete_pipeline(self, pipeline_id: str) -> None:
+        """Delete a pipeline.
+
+        Args:
+            pipeline_id: The pipeline's unique ID
+
+        Raises:
+            PipelineNotFoundError: If pipeline doesn't exist
+        """
+        session = self._db.get_session()
+        try:
+            pipeline = session.get(Pipeline, pipeline_id)
+            if pipeline is None:
+                raise PipelineNotFoundError(f"Pipeline with id '{pipeline_id}' not found")
+
+            session.delete(pipeline)
             session.commit()
         finally:
             session.close()
