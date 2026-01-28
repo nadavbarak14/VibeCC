@@ -7,9 +7,9 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from vibecc.api.dependencies import close_state_store, init_state_store
+from vibecc.api.dependencies import close_state_store, init_event_manager, init_state_store
 from vibecc.api.models import APIResponse
-from vibecc.api.routes import control, history, pipelines, projects
+from vibecc.api.routes import control, events, history, pipelines, projects
 from vibecc.state_store import (
     PipelineNotFoundError,
     ProjectExistsError,
@@ -25,6 +25,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Startup
     db_path = app.state.db_path if hasattr(app.state, "db_path") else "vibecc.db"
     init_state_store(db_path)
+    init_event_manager()
     yield
     # Shutdown
     close_state_store()
@@ -102,6 +103,7 @@ def create_app(db_path: str = "vibecc.db") -> FastAPI:
     app.include_router(pipelines.router, prefix="/api/v1")
     app.include_router(history.router, prefix="/api/v1")
     app.include_router(control.router, prefix="/api/v1")
+    app.include_router(events.router, prefix="/api/v1")
 
     return app
 

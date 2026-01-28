@@ -1,12 +1,17 @@
 """FastAPI dependencies for dependency injection."""
 
-from collections.abc import Generator
+from __future__ import annotations
+
+from collections.abc import Generator  # noqa: TC003
 from dataclasses import dataclass
-from typing import Annotated, Protocol
+from typing import TYPE_CHECKING, Annotated, Protocol
 
 from fastapi import Depends
 
 from vibecc.state_store import StateStore
+
+if TYPE_CHECKING:
+    from vibecc.api.events import EventManager
 
 
 @dataclass
@@ -88,3 +93,31 @@ def get_orchestrator() -> Generator[Orchestrator, None, None]:
 
 # Type alias for dependency injection
 OrchestratorDep = Annotated[Orchestrator, Depends(get_orchestrator)]
+
+# Global EventManager instance
+_event_manager: EventManager | None = None
+
+
+def init_event_manager() -> EventManager:
+    """Initialize the global EventManager instance."""
+    from vibecc.api.events import EventManager as EM  # noqa: PLC0415
+
+    global _event_manager  # noqa: PLW0603
+    _event_manager = EM()
+    return _event_manager
+
+
+def get_event_manager() -> Generator[EventManager, None, None]:
+    """Dependency that provides the EventManager instance."""
+    if _event_manager is None:
+        raise RuntimeError("EventManager not initialized. Call init_event_manager() first.")
+    yield _event_manager
+
+
+def _get_event_manager_dep() -> Generator[EventManager, None, None]:
+    """Dependency wrapper for EventManager."""
+    yield from get_event_manager()
+
+
+# Type alias for dependency injection
+EventManagerDep = Annotated["EventManager", Depends(_get_event_manager_dep)]
