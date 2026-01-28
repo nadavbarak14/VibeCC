@@ -46,9 +46,7 @@ class Database:
 
             # Enable WAL mode for concurrent reads
             @event.listens_for(self._engine, "connect")
-            def set_sqlite_pragma(
-                dbapi_connection: object, _connection_record: object
-            ) -> None:
+            def set_sqlite_pragma(dbapi_connection: object, _connection_record: object) -> None:
                 cursor = dbapi_connection.cursor()  # type: ignore[attr-defined]
                 cursor.execute("PRAGMA journal_mode=WAL")
                 cursor.execute("PRAGMA foreign_keys=ON")

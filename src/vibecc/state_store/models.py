@@ -99,9 +99,7 @@ class Pipeline(Base):
     __tablename__ = "pipelines"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    project_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("projects.id"), nullable=False
-    )
+    project_id: Mapped[str] = mapped_column(String(36), ForeignKey("projects.id"), nullable=False)
     ticket_id: Mapped[str] = mapped_column(String(50), nullable=False)
     ticket_title: Mapped[str] = mapped_column(String(500), nullable=False)
     ticket_body: Mapped[str] = mapped_column(Text, nullable=False)
@@ -163,10 +161,7 @@ class Pipeline(Base):
         self.state = value.value
 
     def __repr__(self) -> str:
-        return (
-            f"<Pipeline(id={self.id!r}, ticket_id={self.ticket_id!r}, "
-            f"state={self.state!r})>"
-        )
+        return f"<Pipeline(id={self.id!r}, ticket_id={self.ticket_id!r}, state={self.state!r})>"
 
 
 class PipelineHistory(Base):
