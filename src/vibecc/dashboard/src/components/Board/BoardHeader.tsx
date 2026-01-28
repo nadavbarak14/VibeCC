@@ -12,6 +12,8 @@ interface BoardHeaderProps {
   onStop: () => void;
   isAutopilotLoading: boolean;
   onSettingsClick: () => void;
+  onSyncQueue: () => void;
+  isSyncLoading: boolean;
 }
 
 const sseLabels: Record<SSEStatus, string> = {
@@ -34,7 +36,11 @@ export function BoardHeader({
   onStop,
   isAutopilotLoading,
   onSettingsClick,
+  onSyncQueue,
+  isSyncLoading,
 }: BoardHeaderProps) {
+  const queueCount = status?.queued_tickets ?? 0;
+
   return (
     <div className="mb-6 flex items-center justify-between">
       <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
@@ -53,6 +59,14 @@ export function BoardHeader({
             color={status.running ? "green" : "gray"}
           />
         )}
+        <Button
+          variant="primary"
+          onClick={onSyncQueue}
+          disabled={isSyncLoading || queueCount === 0}
+          data-testid="sync-queue-btn"
+        >
+          {isSyncLoading ? "Syncing..." : `Sync Queue (${queueCount})`}
+        </Button>
         <AutopilotToggle
           status={status}
           onStart={onStart}
