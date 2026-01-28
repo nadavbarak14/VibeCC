@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from datetime import UTC, datetime
+
+from sqlalchemy import case, func, select
 from sqlalchemy.exc import IntegrityError
 
 from vibecc.state_store.database import Database
@@ -13,7 +15,13 @@ from vibecc.state_store.exceptions import (
     ProjectHasActivePipelinesError,
     ProjectNotFoundError,
 )
-from vibecc.state_store.models import Pipeline, PipelineState, Project
+from vibecc.state_store.models import (
+    HistoryStats,
+    Pipeline,
+    PipelineHistory,
+    PipelineState,
+    Project,
+)
 
 
 class StateStore:
@@ -432,5 +440,130 @@ class StateStore:
 
             session.delete(pipeline)
             session.commit()
+        finally:
+            session.close()
+
+    # --- History Operations ---
+
+    def save_to_history(self, pipeline: Pipeline) -> PipelineHistory:
+        """Move completed pipeline to history.
+
+        Copies pipeline data to history table with completion timestamp.
+        Does NOT delete the original pipeline (caller should do that).
+
+        Args:
+            pipeline: The completed pipeline (state should be MERGED or FAILED)
+
+        Returns:
+            Created PipelineHistory object
+        """
+        session = self._db.get_session()
+        try:
+            completed_at = datetime.now(UTC)
+            started_at = pipeline.created_at.replace(tzinfo=UTC)
+            duration_seconds = int((completed_at - started_at).total_seconds())
+
+            history = PipelineHistory(
+                project_id=pipeline.project_id,
+                ticket_id=pipeline.ticket_id,
+                ticket_title=pipeline.ticket_title,
+                final_state=pipeline.state,
+                branch_name=pipeline.branch_name,
+                pr_id=pipeline.pr_id,
+                pr_url=pipeline.pr_url,
+                total_retries_ci=pipeline.retry_count_ci,
+                total_retries_review=pipeline.retry_count_review,
+                started_at=pipeline.created_at,
+                duration_seconds=duration_seconds,
+            )
+            session.add(history)
+            session.commit()
+            session.refresh(history)
+            return history
+        finally:
+            session.close()
+
+    def get_history(
+        self,
+        project_id: str | None = None,
+        final_state: PipelineState | None = None,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[PipelineHistory]:
+        """Query pipeline history.
+
+        Args:
+            project_id: Filter by project (None = all)
+            final_state: Filter by final state (None = all)
+            limit: Max results to return
+            offset: Offset for pagination
+
+        Returns:
+            List of historical pipelines, ordered by completed_at desc
+        """
+        session = self._db.get_session()
+        try:
+            stmt = select(PipelineHistory)
+
+            if project_id is not None:
+                stmt = stmt.where(PipelineHistory.project_id == project_id)
+            if final_state is not None:
+                stmt = stmt.where(PipelineHistory.final_state == final_state.value)
+
+            stmt = stmt.order_by(PipelineHistory.completed_at.desc())
+            stmt = stmt.limit(limit).offset(offset)
+
+            result = session.execute(stmt)
+            return list(result.scalars().all())
+        finally:
+            session.close()
+
+    def get_history_stats(
+        self,
+        project_id: str | None = None,
+    ) -> HistoryStats:
+        """Get aggregated stats from history.
+
+        Args:
+            project_id: Filter by project (None = all)
+
+        Returns:
+            HistoryStats with counts, averages, etc.
+        """
+        session = self._db.get_session()
+        try:
+            # Build base query
+            stmt = select(
+                func.count(PipelineHistory.id).label("total"),
+                func.sum(
+                    case(
+                        (PipelineHistory.final_state == PipelineState.MERGED.value, 1),
+                        else_=0,
+                    )
+                ).label("merged"),
+                func.sum(
+                    case(
+                        (PipelineHistory.final_state == PipelineState.FAILED.value, 1),
+                        else_=0,
+                    )
+                ).label("failed"),
+                func.avg(PipelineHistory.duration_seconds).label("avg_duration"),
+                func.avg(PipelineHistory.total_retries_ci).label("avg_ci"),
+                func.avg(PipelineHistory.total_retries_review).label("avg_review"),
+            )
+
+            if project_id is not None:
+                stmt = stmt.where(PipelineHistory.project_id == project_id)
+
+            result = session.execute(stmt).one()
+
+            return HistoryStats(
+                total_completed=result.total or 0,
+                total_merged=result.merged or 0,
+                total_failed=result.failed or 0,
+                avg_duration_seconds=float(result.avg_duration or 0.0),
+                avg_retries_ci=float(result.avg_ci or 0.0),
+                avg_retries_review=float(result.avg_review or 0.0),
+            )
         finally:
             session.close()
