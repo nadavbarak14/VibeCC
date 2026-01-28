@@ -89,7 +89,13 @@ class TestExecute:
             call_args = mock_run.call_args
 
             # Check command
-            assert call_args[0][0] == ["claude", "-p", worker.build_prompt(task), "--yes"]
+            assert call_args[0][0] == [
+                "claude",
+                "-p",
+                worker.build_prompt(task),
+                "--permission-mode",
+                "acceptEdits",
+            ]
 
             # Check kwargs
             assert call_args[1]["cwd"] == task.repo_path
