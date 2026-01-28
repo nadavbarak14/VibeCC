@@ -2,6 +2,8 @@
 
 from datetime import datetime
 
+import pytest
+
 from vibecc.state_store.models import (
     Pipeline,
     PipelineHistory,
@@ -10,6 +12,7 @@ from vibecc.state_store.models import (
 )
 
 
+@pytest.mark.unit
 class TestPipelineStateEnum:
     """Tests for PipelineState enum."""
 
@@ -32,6 +35,7 @@ class TestPipelineStateEnum:
             assert isinstance(state.value, str)
 
 
+@pytest.mark.unit
 class TestProjectModel:
     """Tests for Project model."""
 
@@ -66,6 +70,7 @@ class TestProjectModel:
         assert "owner/repo" in repr_str
 
 
+@pytest.mark.unit
 class TestPipelineModel:
     """Tests for Pipeline model."""
 
@@ -144,6 +149,7 @@ class TestPipelineModel:
         assert "queued" in repr_str
 
 
+@pytest.mark.unit
 class TestPipelineHistoryModel:
     """Tests for PipelineHistory model."""
 

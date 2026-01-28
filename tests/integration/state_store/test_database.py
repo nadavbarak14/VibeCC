@@ -36,6 +36,7 @@ def database(temp_db_path: str) -> Database:
     Path(f"{temp_db_path}-shm").unlink(missing_ok=True)
 
 
+@pytest.mark.integration
 class TestDatabaseSetup:
     """Tests for database setup."""
 
@@ -66,6 +67,7 @@ class TestDatabaseSetup:
             assert fk_enabled == 1
 
 
+@pytest.mark.integration
 class TestMigrations:
     """Tests for database migrations."""
 
@@ -79,6 +81,7 @@ class TestMigrations:
         db.close()
 
 
+@pytest.mark.integration
 class TestModelRoundtrip:
     """Tests for model persistence."""
 
@@ -168,6 +171,7 @@ class TestModelRoundtrip:
         session.close()
 
 
+@pytest.mark.integration
 class TestForeignKeys:
     """Tests for foreign key relationships."""
 
@@ -229,6 +233,7 @@ class TestForeignKeys:
         session.close()
 
 
+@pytest.mark.integration
 class TestTimestamps:
     """Tests for automatic timestamps."""
 
@@ -254,6 +259,7 @@ class TestTimestamps:
         session.close()
 
 
+@pytest.mark.integration
 class TestInMemoryDatabase:
     """Tests for in-memory database."""
 
