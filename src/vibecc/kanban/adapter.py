@@ -16,7 +16,8 @@ from vibecc.kanban.models import Ticket
 
 # Column name mapping from internal names to GitHub Project column names
 COLUMNS = {
-    "queue": "Queue",
+    "queue": "Todo",
+    "todo": "Todo",
     "in_progress": "In Progress",
     "done": "Done",
     "failed": "Failed",
@@ -106,7 +107,59 @@ class KanbanAdapter:
         if self._project_id is not None:
             return
 
-        # Query to get project ID and status field with options
+        # Try user-level project first (most common for personal projects)
+        project = self._try_fetch_user_project()
+        if not project:
+            # Fall back to repository-level project
+            project = self._try_fetch_repo_project()
+
+        if not project:
+            raise ProjectNotFoundError(
+                f"Project #{self.project_number} not found for "
+                f"user {self.owner} or repo {self.repo}"
+            )
+
+        self._project_id = project["id"]
+
+        status_field = project.get("field")
+        if not status_field:
+            raise KanbanError("Status field not found in project")
+
+        self._status_field_id = status_field["id"]
+        self._column_options = {opt["name"]: opt["id"] for opt in status_field["options"]}
+
+    def _try_fetch_user_project(self) -> dict[str, Any] | None:
+        """Try to fetch project from user level."""
+        query = """
+        query($owner: String!, $projectNumber: Int!) {
+            user(login: $owner) {
+                projectV2(number: $projectNumber) {
+                    id
+                    field(name: "Status") {
+                        ... on ProjectV2SingleSelectField {
+                            id
+                            options {
+                                id
+                                name
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        """
+        try:
+            data = self._graphql(
+                query,
+                {"owner": self.owner, "projectNumber": self.project_number},
+            )
+            result: dict[str, Any] | None = data.get("user", {}).get("projectV2")
+            return result
+        except KanbanError:
+            return None
+
+    def _try_fetch_repo_project(self) -> dict[str, Any] | None:
+        """Try to fetch project from repository level."""
         query = """
         query($owner: String!, $repo: String!, $projectNumber: Int!) {
             repository(owner: $owner, name: $repo) {
@@ -125,28 +178,19 @@ class KanbanAdapter:
             }
         }
         """
-
-        data = self._graphql(
-            query,
-            {
-                "owner": self.owner,
-                "repo": self.repo_name,
-                "projectNumber": self.project_number,
-            },
-        )
-
-        project = data.get("repository", {}).get("projectV2")
-        if not project:
-            raise ProjectNotFoundError(f"Project #{self.project_number} not found in {self.repo}")
-
-        self._project_id = project["id"]
-
-        status_field = project.get("field")
-        if not status_field:
-            raise KanbanError("Status field not found in project")
-
-        self._status_field_id = status_field["id"]
-        self._column_options = {opt["name"]: opt["id"] for opt in status_field["options"]}
+        try:
+            data = self._graphql(
+                query,
+                {
+                    "owner": self.owner,
+                    "repo": self.repo_name,
+                    "projectNumber": self.project_number,
+                },
+            )
+            result: dict[str, Any] | None = data.get("repository", {}).get("projectV2")
+            return result
+        except KanbanError:
+            return None
 
     def _get_column_option_id(self, column: str) -> str:
         """Get the GitHub option ID for a column name.

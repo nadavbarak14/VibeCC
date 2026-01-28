@@ -31,7 +31,7 @@ def adapter(mock_client: MagicMock) -> KanbanAdapter:
     adapter._project_id = "PVT_123"
     adapter._status_field_id = "PVTSSF_456"
     adapter._column_options = {
-        "Queue": "opt_queue",
+        "Todo": "opt_queue",
         "In Progress": "opt_in_progress",
         "Done": "opt_done",
         "Failed": "opt_failed",
@@ -62,7 +62,7 @@ class TestListTickets:
                         "nodes": [
                             {
                                 "id": "item_1",
-                                "fieldValueByName": {"name": "Queue"},
+                                "fieldValueByName": {"name": "Todo"},
                                 "content": {
                                     "number": 42,
                                     "title": "Test ticket",
@@ -72,7 +72,7 @@ class TestListTickets:
                             },
                             {
                                 "id": "item_2",
-                                "fieldValueByName": {"name": "Queue"},
+                                "fieldValueByName": {"name": "Todo"},
                                 "content": {
                                     "number": 43,
                                     "title": "Another ticket",
@@ -136,7 +136,7 @@ class TestListTickets:
                         "nodes": [
                             {
                                 "id": "item_1",
-                                "fieldValueByName": {"name": "Queue"},
+                                "fieldValueByName": {"name": "Todo"},
                                 "content": {
                                     "number": 1,
                                     "title": "Queue ticket",

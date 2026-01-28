@@ -101,7 +101,7 @@ class CoderWorker:
             CompletedProcess with stdout/stderr.
         """
         return subprocess.run(
-            ["claude", "-p", prompt, "--yes"],
+            ["claude", "-p", prompt, "--permission-mode", "acceptEdits"],
             cwd=repo_path,
             capture_output=True,
             text=True,
