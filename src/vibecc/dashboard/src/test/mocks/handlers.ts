@@ -2,6 +2,7 @@ import { http, HttpResponse } from "msw";
 import type {
   Project,
   AutopilotStatus,
+  AutopilotAction,
   Pipeline,
   PipelineHistory,
   HistoryStats,
@@ -283,5 +284,41 @@ export const handlers = [
       data: mockHistoryStats,
       error: null,
     } satisfies APIResponse<HistoryStats>);
+  }),
+
+  http.post("/api/v1/projects/:projectId/autopilot/start", ({ params }) => {
+    const { projectId } = params;
+    if (!mockAutopilotStatuses[projectId as string]) {
+      return HttpResponse.json(
+        { data: null, error: "Project not found" } satisfies APIResponse<null>,
+        { status: 404 },
+      );
+    }
+    mockAutopilotStatuses[projectId as string] = {
+      ...mockAutopilotStatuses[projectId as string],
+      running: true,
+    };
+    return HttpResponse.json({
+      data: { message: "Autopilot started" },
+      error: null,
+    } satisfies APIResponse<AutopilotAction>);
+  }),
+
+  http.post("/api/v1/projects/:projectId/autopilot/stop", ({ params }) => {
+    const { projectId } = params;
+    if (!mockAutopilotStatuses[projectId as string]) {
+      return HttpResponse.json(
+        { data: null, error: "Project not found" } satisfies APIResponse<null>,
+        { status: 404 },
+      );
+    }
+    mockAutopilotStatuses[projectId as string] = {
+      ...mockAutopilotStatuses[projectId as string],
+      running: false,
+    };
+    return HttpResponse.json({
+      data: { message: "Autopilot stopped" },
+      error: null,
+    } satisfies APIResponse<AutopilotAction>);
   }),
 ];
