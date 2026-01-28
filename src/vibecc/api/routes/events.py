@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -28,10 +29,10 @@ async def event_stream(
     Events are filtered by project_id if provided, otherwise all events are sent.
     A heartbeat is sent every 30 seconds to keep the connection alive.
     """
-    em: EventManager = event_manager  # type: ignore[assignment]
+    em: EventManager = event_manager
     subscriber = em.subscribe(project_id)
 
-    async def generate():
+    async def generate() -> AsyncGenerator[str, None]:
         try:
             while True:
                 try:
