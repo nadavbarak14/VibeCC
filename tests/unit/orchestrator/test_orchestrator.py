@@ -344,7 +344,9 @@ class TestProcessTestingState:
         pipeline_with_pr.pr_url = "https://github.com/owner/repo/pull/123"
 
         mock_state_store.get_pipeline.side_effect = [
-            sample_pipeline, pipeline_with_pr, pipeline_with_pr
+            sample_pipeline,
+            pipeline_with_pr,
+            pipeline_with_pr,
         ]
         mock_state_store.get_project.return_value = sample_project
 

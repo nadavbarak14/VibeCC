@@ -202,9 +202,7 @@ class Orchestrator:
                 case PipelineState.FAILED:
                     logger.info("Pipeline %s already failed", pipeline_id)
                 case _:
-                    raise PipelineProcessingError(
-                        f"Unknown pipeline state: {pipeline.state}"
-                    )
+                    raise PipelineProcessingError(f"Unknown pipeline state: {pipeline.state}")
         except Exception as e:
             logger.exception("Error processing pipeline %s: %s", pipeline_id, e)
             self._log_pipeline(pipeline, "error", f"Processing error: {e}")
@@ -380,9 +378,7 @@ class Orchestrator:
         if result.success:
             self._handle_testing_success(pipeline, project, git_manager, kanban)
         else:
-            self._handle_testing_failure(
-                pipeline, project, result.failure_logs or "CI failed"
-            )
+            self._handle_testing_failure(pipeline, project, result.failure_logs or "CI failed")
 
     def _handle_testing_success(
         self,
