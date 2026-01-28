@@ -6,12 +6,20 @@ class MockEventSource {
   static instances: MockEventSource[] = [];
   url: string;
   readyState = 0;
+  onopen: ((event: Event) => void) | null = null;
+  onerror: ((event: Event) => void) | null = null;
   private listeners: Record<string, ((event: MessageEvent) => void)[]> = {};
 
   constructor(url: string) {
     this.url = url;
     this.readyState = 1;
     MockEventSource.instances.push(this);
+    // Simulate async open
+    queueMicrotask(() => {
+      if (this.readyState === 1) {
+        this.onopen?.(new Event("open"));
+      }
+    });
   }
 
   addEventListener(type: string, listener: (event: MessageEvent) => void) {
@@ -39,6 +47,11 @@ class MockEventSource {
   simulateEvent(type: string, data: unknown) {
     const event = new MessageEvent(type, { data: JSON.stringify(data) });
     this.dispatchEvent(event);
+  }
+
+  // Helper for tests to simulate errors / disconnects
+  simulateError() {
+    this.onerror?.(new Event("error"));
   }
 }
 

@@ -84,3 +84,16 @@ export interface HistoryFilters {
   limit?: number;
   offset?: number;
 }
+
+export type SSEEventType =
+  | "pipeline_created"
+  | "pipeline_updated"
+  | "pipeline_completed"
+  | "log";
+
+export interface SSEEvent {
+  type: SSEEventType;
+  data: Record<string, unknown>;
+}
+
+export type SSEStatus = "connecting" | "connected" | "disconnected";

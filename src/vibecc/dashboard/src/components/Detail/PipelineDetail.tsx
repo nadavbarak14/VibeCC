@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Pipeline, Project } from "../../types/api";
-import { useSSE } from "../../hooks/useSSE";
+import { useLogStream } from "../../hooks/useLogStream";
 import { Timeline } from "./Timeline";
 import { LogStream } from "./LogStream";
 
@@ -16,7 +16,7 @@ export function PipelineDetail({
   onClose,
 }: PipelineDetailProps) {
   const [descExpanded, setDescExpanded] = useState(false);
-  const { logs } = useSSE({
+  const { logs } = useLogStream({
     projectId: pipeline.project_id,
     pipelineId: pipeline.id,
     enabled: pipeline.state !== "merged" && pipeline.state !== "failed",
