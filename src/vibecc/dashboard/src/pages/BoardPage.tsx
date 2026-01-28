@@ -1,9 +1,12 @@
+import { useState } from "react";
 import { useParams } from "react-router-dom";
 import { useProject } from "../hooks/useProject";
 import { usePipelines } from "../hooks/usePipelines";
 import { useAutopilotStatus } from "../hooks/useAutopilotStatus";
 import { BoardHeader } from "../components/Board/BoardHeader";
 import { KanbanBoard } from "../components/Board/KanbanBoard";
+import { PipelineDetail } from "../components/Detail/PipelineDetail";
+import type { Pipeline } from "../types/api";
 
 export function BoardPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -12,6 +15,9 @@ export function BoardPage() {
     projectId!,
   );
   const { data: status } = useAutopilotStatus(projectId!);
+  const [selectedPipeline, setSelectedPipeline] = useState<Pipeline | null>(
+    null,
+  );
 
   if (projectLoading || pipelinesLoading) {
     return (
@@ -32,7 +38,17 @@ export function BoardPage() {
   return (
     <div>
       <BoardHeader project={project} status={status} />
-      <KanbanBoard pipelines={pipelines ?? []} />
+      <KanbanBoard
+        pipelines={pipelines ?? []}
+        onCardClick={setSelectedPipeline}
+      />
+      {selectedPipeline && (
+        <PipelineDetail
+          pipeline={selectedPipeline}
+          project={project}
+          onClose={() => setSelectedPipeline(null)}
+        />
+      )}
     </div>
   );
 }

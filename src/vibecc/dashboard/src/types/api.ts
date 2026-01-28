@@ -46,3 +46,10 @@ export interface Pipeline {
   created_at: string;
   updated_at: string;
 }
+
+export interface LogEntry {
+  pipeline_id: string;
+  level: string;
+  message: string;
+  timestamp: string;
+}
