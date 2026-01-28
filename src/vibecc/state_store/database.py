@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import StaticPool
 
 from vibecc.state_store.models import Base
 
@@ -38,11 +39,22 @@ class Database:
             if self.db_path != ":memory:":
                 Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
 
-            self._engine = create_engine(
-                f"sqlite:///{self.db_path}",
-                echo=False,
-                future=True,
-            )
+            # For in-memory databases, use StaticPool to share connection across threads
+            # and allow cross-thread access (needed for testing with TestClient)
+            if self.db_path == ":memory:":
+                self._engine = create_engine(
+                    "sqlite:///:memory:",
+                    echo=False,
+                    future=True,
+                    poolclass=StaticPool,
+                    connect_args={"check_same_thread": False},
+                )
+            else:
+                self._engine = create_engine(
+                    f"sqlite:///{self.db_path}",
+                    echo=False,
+                    future=True,
+                )
 
             # Enable WAL mode for concurrent reads
             @event.listens_for(self._engine, "connect")
