@@ -5,9 +5,11 @@ from fastapi import APIRouter, status
 from vibecc.api.dependencies import StateStoreDep
 from vibecc.api.models import (
     APIResponse,
+    PipelineResponse,
     ProjectCreate,
     ProjectResponse,
     ProjectUpdate,
+    pipeline_to_response,
     project_to_response,
 )
 
@@ -66,3 +68,15 @@ def update_project(
 def delete_project(project_id: str, store: StateStoreDep) -> None:
     """Delete a project."""
     store.delete_project(project_id)
+
+
+@router.get(
+    "/{project_id}/tickets/{ticket_id}/pipeline",
+    response_model=APIResponse[PipelineResponse],
+)
+def get_pipeline_by_ticket(
+    project_id: str, ticket_id: str, store: StateStoreDep
+) -> APIResponse[PipelineResponse]:
+    """Get pipeline by project and ticket ID."""
+    pipeline = store.get_pipeline_by_ticket(project_id, ticket_id)
+    return APIResponse(data=pipeline_to_response(pipeline))

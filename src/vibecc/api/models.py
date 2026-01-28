@@ -58,3 +58,78 @@ class ProjectResponse(BaseModel):
 def project_to_response(project: Any) -> ProjectResponse:
     """Convert a Project model to ProjectResponse."""
     return ProjectResponse.model_validate(project)
+
+
+# Pipeline models
+
+
+class PipelineResponse(BaseModel):
+    """Response model for a pipeline."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    project_id: str
+    ticket_id: str
+    ticket_title: str
+    ticket_body: str
+    state: str
+    branch_name: str
+    pr_id: int | None
+    pr_url: str | None
+    retry_count_ci: int
+    retry_count_review: int
+    feedback: str | None
+    created_at: datetime
+    updated_at: datetime
+
+
+def pipeline_to_response(pipeline: Any) -> PipelineResponse:
+    """Convert a Pipeline model to PipelineResponse."""
+    return PipelineResponse.model_validate(pipeline)
+
+
+# History models
+
+
+class HistoryResponse(BaseModel):
+    """Response model for a pipeline history entry."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str
+    project_id: str
+    ticket_id: str
+    ticket_title: str
+    final_state: str
+    branch_name: str
+    pr_id: int | None
+    pr_url: str | None
+    total_retries_ci: int
+    total_retries_review: int
+    started_at: datetime
+    completed_at: datetime
+    duration_seconds: int
+
+
+def history_to_response(history: Any) -> HistoryResponse:
+    """Convert a PipelineHistory model to HistoryResponse."""
+    return HistoryResponse.model_validate(history)
+
+
+class HistoryStatsResponse(BaseModel):
+    """Response model for history statistics."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    total_completed: int
+    total_merged: int
+    total_failed: int
+    avg_duration_seconds: float
+    avg_retries_ci: float
+    avg_retries_review: float
+
+
+def history_stats_to_response(stats: Any) -> HistoryStatsResponse:
+    """Convert a HistoryStats model to HistoryStatsResponse."""
+    return HistoryStatsResponse.model_validate(stats)
