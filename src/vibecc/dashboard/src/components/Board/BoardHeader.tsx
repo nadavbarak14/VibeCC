@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import type { Project, AutopilotStatus } from "../../types/api";
 import { Badge } from "../common/Badge";
 import { Button } from "../common/Button";
@@ -22,6 +23,9 @@ export function BoardHeader({ project, status }: BoardHeaderProps) {
         ) : (
           <Badge label="Unknown" color="gray" />
         )}
+        <Link to={`/projects/${project.id}/history`}>
+          <Button variant="secondary">History</Button>
+        </Link>
         <Button variant="secondary" disabled>
           Settings
         </Button>
