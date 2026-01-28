@@ -78,9 +78,7 @@ class Scheduler:
         # Count active pipelines
         active_count = 0
         for state in _ACTIVE_STATES:
-            active_count += len(
-                self.state_store.list_pipelines(project_id=project_id, state=state)
-            )
+            active_count += len(self.state_store.list_pipelines(project_id=project_id, state=state))
 
         available_capacity = max(0, self.max_concurrent - active_count)
         logger.info(
