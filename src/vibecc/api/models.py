@@ -133,3 +133,28 @@ class HistoryStatsResponse(BaseModel):
 def history_stats_to_response(stats: Any) -> HistoryStatsResponse:
     """Convert a HistoryStats model to HistoryStatsResponse."""
     return HistoryStatsResponse.model_validate(stats)
+
+
+# Autopilot/Control models
+
+
+class AutopilotStatusResponse(BaseModel):
+    """Response model for autopilot status."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    project_id: str
+    running: bool
+    active_pipelines: int
+    queued_tickets: int
+
+
+def autopilot_status_to_response(status: Any) -> AutopilotStatusResponse:
+    """Convert an AutopilotStatus to AutopilotStatusResponse."""
+    return AutopilotStatusResponse.model_validate(status)
+
+
+class AutopilotActionResponse(BaseModel):
+    """Response model for autopilot actions (start/stop)."""
+
+    message: str
