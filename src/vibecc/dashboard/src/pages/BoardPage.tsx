@@ -4,11 +4,20 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useProject } from "../hooks/useProject";
 import { usePipelines } from "../hooks/usePipelines";
 import { useAutopilotStatus } from "../hooks/useAutopilotStatus";
+import { useStartAutopilot } from "../hooks/useStartAutopilot";
+import { useStopAutopilot } from "../hooks/useStopAutopilot";
 import { useSSE } from "../hooks/useSSE";
 import { BoardHeader } from "../components/Board/BoardHeader";
 import { KanbanBoard } from "../components/Board/KanbanBoard";
 import { PipelineDetail } from "../components/Detail/PipelineDetail";
+import { SettingsModal } from "../components/Control/SettingsModal";
+import {
+  ToastContainer,
+  type ToastMessage,
+} from "../components/Control/Toast";
 import type { Pipeline, SSEEvent } from "../types/api";
+
+let toastId = 0;
 
 export function BoardPage() {
   const { projectId } = useParams<{ projectId: string }>();
@@ -21,6 +30,34 @@ export function BoardPage() {
   const [selectedPipeline, setSelectedPipeline] = useState<Pipeline | null>(
     null,
   );
+  const [showSettings, setShowSettings] = useState(false);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const addToast = useCallback((text: string, type: "success" | "error") => {
+    const id = String(++toastId);
+    setToasts((prev) => [...prev, { id, text, type }]);
+  }, []);
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const startMutation = useStartAutopilot(projectId!);
+  const stopMutation = useStopAutopilot(projectId!);
+
+  const handleStart = useCallback(() => {
+    startMutation.mutate(undefined, {
+      onSuccess: () => addToast("Autopilot started", "success"),
+      onError: () => addToast("Failed to start autopilot", "error"),
+    });
+  }, [startMutation, addToast]);
+
+  const handleStop = useCallback(() => {
+    stopMutation.mutate(undefined, {
+      onSuccess: () => addToast("Autopilot stopped", "success"),
+      onError: () => addToast("Failed to stop autopilot", "error"),
+    });
+  }, [stopMutation, addToast]);
 
   const onEvent = useCallback(
     (event: SSEEvent) => {
@@ -75,6 +112,10 @@ export function BoardPage() {
         project={project}
         status={status}
         sseStatus={sseStatus}
+        onStart={handleStart}
+        onStop={handleStop}
+        isAutopilotLoading={startMutation.isPending || stopMutation.isPending}
+        onSettingsClick={() => setShowSettings(true)}
       />
       <KanbanBoard
         pipelines={pipelines ?? []}
@@ -87,6 +128,13 @@ export function BoardPage() {
           onClose={() => setSelectedPipeline(null)}
         />
       )}
+      {showSettings && (
+        <SettingsModal
+          project={project}
+          onClose={() => setShowSettings(false)}
+        />
+      )}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
 }

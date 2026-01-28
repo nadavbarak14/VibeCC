@@ -85,6 +85,10 @@ export interface HistoryFilters {
   offset?: number;
 }
 
+export interface AutopilotAction {
+  message: string;
+}
+
 export type SSEEventType =
   | "pipeline_created"
   | "pipeline_updated"
