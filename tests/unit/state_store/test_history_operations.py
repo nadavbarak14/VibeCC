@@ -49,9 +49,7 @@ def completed_pipeline(store: StateStore, project):
 class TestSaveToHistory:
     """Tests for save_to_history."""
 
-    def test_save_to_history_copies_all_fields(
-        self, store: StateStore, completed_pipeline
-    ) -> None:
+    def test_save_to_history_copies_all_fields(self, store: StateStore, completed_pipeline) -> None:
         """All pipeline fields copied correctly."""
         history = store.save_to_history(completed_pipeline)
 
@@ -67,18 +65,14 @@ class TestSaveToHistory:
         assert history.total_retries_review == completed_pipeline.retry_count_review
         assert history.started_at == completed_pipeline.created_at
 
-    def test_save_to_history_sets_completed_at(
-        self, store: StateStore, completed_pipeline
-    ) -> None:
+    def test_save_to_history_sets_completed_at(self, store: StateStore, completed_pipeline) -> None:
         """completed_at timestamp set."""
         history = store.save_to_history(completed_pipeline)
 
         assert history.completed_at is not None
         assert history.completed_at >= completed_pipeline.created_at
 
-    def test_save_to_history_calculates_duration(
-        self, store: StateStore, project
-    ) -> None:
+    def test_save_to_history_calculates_duration(self, store: StateStore, project) -> None:
         """duration_seconds calculated from timestamps."""
         pipeline = store.create_pipeline(
             project_id=project.id,
@@ -231,9 +225,7 @@ class TestGetHistory:
         # Should skip first 2 (most recent)
         assert offset_history[0].id == all_history[2].id
 
-    def test_get_history_ordered_by_completed_at(
-        self, store: StateStore, project
-    ) -> None:
+    def test_get_history_ordered_by_completed_at(self, store: StateStore, project) -> None:
         """Most recent first."""
         # Create entries with delays to ensure different timestamps
         for i in range(3):
