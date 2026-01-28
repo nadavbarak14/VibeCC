@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import httpx
@@ -13,6 +14,8 @@ from vibecc.kanban.exceptions import (
     TicketNotFoundError,
 )
 from vibecc.kanban.models import Ticket
+
+logger = logging.getLogger("vibecc.kanban")
 
 # Column name mapping from internal names to GitHub Project column names
 COLUMNS = {
@@ -230,6 +233,7 @@ class KanbanAdapter:
         Returns:
             List of Ticket objects in the column
         """
+        logger.debug("Listing tickets in column: %s", column)
         self._ensure_project_metadata()
         github_column = COLUMNS.get(column, column)
 
@@ -295,6 +299,7 @@ class KanbanAdapter:
                 )
             )
 
+        logger.info("Found %d ticket(s) in column %s", len(tickets), column)
         return tickets
 
     def get_ticket(self, ticket_id: str) -> Ticket:
@@ -360,6 +365,7 @@ class KanbanAdapter:
             TicketNotFoundError: If ticket not in project
             ColumnNotFoundError: If column doesn't exist
         """
+        logger.info("Moving ticket #%s to column: %s", ticket_id, column)
         self._ensure_project_metadata()
         option_id = self._get_column_option_id(column)
 
@@ -393,6 +399,7 @@ class KanbanAdapter:
                 "optionId": option_id,
             },
         )
+        logger.info("Moved ticket #%s to %s", ticket_id, column)
 
     def _get_project_item_id(self, ticket_id: str) -> str:
         """Get the project item ID for an issue.
@@ -446,6 +453,7 @@ class KanbanAdapter:
         Raises:
             TicketNotFoundError: If ticket doesn't exist
         """
+        logger.info("Closing ticket #%s", ticket_id)
         # First verify the ticket exists
         self.get_ticket(ticket_id)
 
@@ -485,3 +493,4 @@ class KanbanAdapter:
         """
 
         self._graphql(close_mutation, {"issueId": issue_id})
+        logger.info("Closed ticket #%s", ticket_id)
