@@ -9,8 +9,9 @@ from fastapi.responses import JSONResponse
 
 from vibecc.api.dependencies import close_state_store, init_state_store
 from vibecc.api.models import APIResponse
-from vibecc.api.routes import projects
+from vibecc.api.routes import history, pipelines, projects
 from vibecc.state_store import (
+    PipelineNotFoundError,
     ProjectExistsError,
     ProjectHasActivePipelinesError,
     ProjectNotFoundError,
@@ -60,6 +61,15 @@ def create_app(db_path: str = "vibecc.db") -> FastAPI:
             content=APIResponse[None](data=None, error="Project not found").model_dump(),
         )
 
+    @app.exception_handler(PipelineNotFoundError)
+    async def pipeline_not_found_handler(
+        _request: Request, _exc: PipelineNotFoundError
+    ) -> JSONResponse:
+        return JSONResponse(
+            status_code=status.HTTP_404_NOT_FOUND,
+            content=APIResponse[None](data=None, error="Pipeline not found").model_dump(),
+        )
+
     @app.exception_handler(ProjectExistsError)
     async def project_exists_handler(_request: Request, _exc: ProjectExistsError) -> JSONResponse:
         return JSONResponse(
@@ -89,6 +99,8 @@ def create_app(db_path: str = "vibecc.db") -> FastAPI:
 
     # Include routers
     app.include_router(projects.router, prefix="/api/v1")
+    app.include_router(pipelines.router, prefix="/api/v1")
+    app.include_router(history.router, prefix="/api/v1")
 
     return app
 
