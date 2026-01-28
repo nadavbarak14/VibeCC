@@ -8,8 +8,8 @@ from vibecc.state_store.models import (
 )
 
 __all__ = [
-    "Project",
     "Pipeline",
     "PipelineHistory",
     "PipelineState",
+    "Project",
 ]
