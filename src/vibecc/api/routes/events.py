@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -12,6 +11,8 @@ from fastapi.responses import StreamingResponse
 from vibecc.api.dependencies import get_event_manager
 
 if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
     from vibecc.api.events import EventManager
 
 EventManagerDep = Annotated["EventManager", Depends(get_event_manager)]
