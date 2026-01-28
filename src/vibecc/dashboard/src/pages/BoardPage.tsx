@@ -1,15 +1,18 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import { useProject } from "../hooks/useProject";
 import { usePipelines } from "../hooks/usePipelines";
 import { useAutopilotStatus } from "../hooks/useAutopilotStatus";
+import { useSSE } from "../hooks/useSSE";
 import { BoardHeader } from "../components/Board/BoardHeader";
 import { KanbanBoard } from "../components/Board/KanbanBoard";
 import { PipelineDetail } from "../components/Detail/PipelineDetail";
-import type { Pipeline } from "../types/api";
+import type { Pipeline, SSEEvent } from "../types/api";
 
 export function BoardPage() {
   const { projectId } = useParams<{ projectId: string }>();
+  const queryClient = useQueryClient();
   const { data: project, isLoading: projectLoading } = useProject(projectId!);
   const { data: pipelines, isLoading: pipelinesLoading } = usePipelines(
     projectId!,
@@ -18,6 +21,37 @@ export function BoardPage() {
   const [selectedPipeline, setSelectedPipeline] = useState<Pipeline | null>(
     null,
   );
+
+  const onEvent = useCallback(
+    (event: SSEEvent) => {
+      switch (event.type) {
+        case "pipeline_created":
+        case "pipeline_updated":
+          queryClient.invalidateQueries({
+            queryKey: ["pipelines", projectId],
+          });
+          break;
+        case "pipeline_completed":
+          queryClient.invalidateQueries({
+            queryKey: ["pipelines", projectId],
+          });
+          queryClient.invalidateQueries({
+            queryKey: ["history", projectId],
+          });
+          queryClient.invalidateQueries({
+            queryKey: ["history-stats", projectId],
+          });
+          break;
+      }
+    },
+    [projectId, queryClient],
+  );
+
+  const { status: sseStatus } = useSSE({
+    projectId: projectId!,
+    enabled: !projectLoading,
+    onEvent,
+  });
 
   if (projectLoading || pipelinesLoading) {
     return (
@@ -37,7 +71,11 @@ export function BoardPage() {
 
   return (
     <div>
-      <BoardHeader project={project} status={status} />
+      <BoardHeader
+        project={project}
+        status={status}
+        sseStatus={sseStatus}
+      />
       <KanbanBoard
         pipelines={pipelines ?? []}
         onCardClick={setSelectedPipeline}

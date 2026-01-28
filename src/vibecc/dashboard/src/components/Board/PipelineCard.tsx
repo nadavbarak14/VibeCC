@@ -42,7 +42,7 @@ export function PipelineCard({ pipeline, onClick }: PipelineCardProps) {
       clickable
       onClick={onClick}
       data-testid={`pipeline-card-${pipeline.id}`}
-      className="mb-2"
+      className="pipeline-card mb-2"
     >
       <div className="p-3">
         <div className="flex items-start justify-between gap-2">
