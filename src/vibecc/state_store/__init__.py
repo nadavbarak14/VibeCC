@@ -9,6 +9,7 @@ from vibecc.state_store.exceptions import (
     StateStoreError,
 )
 from vibecc.state_store.models import (
+    HistoryStats,
     Pipeline,
     PipelineHistory,
     PipelineState,
@@ -17,6 +18,7 @@ from vibecc.state_store.models import (
 from vibecc.state_store.store import StateStore
 
 __all__ = [
+    "HistoryStats",
     "Pipeline",
     "PipelineExistsError",
     "PipelineHistory",

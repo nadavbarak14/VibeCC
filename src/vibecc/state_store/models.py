@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import datetime  # noqa: TC003 - used at runtime for SQLAlchemy
 from enum import Enum
 from typing import Any
@@ -225,3 +226,15 @@ class PipelineHistory(Base):
             f"<PipelineHistory(id={self.id!r}, ticket_id={self.ticket_id!r}, "
             f"final_state={self.final_state!r})>"
         )
+
+
+@dataclass
+class HistoryStats:
+    """Aggregated statistics from pipeline history."""
+
+    total_completed: int
+    total_merged: int
+    total_failed: int
+    avg_duration_seconds: float
+    avg_retries_ci: float
+    avg_retries_review: float
