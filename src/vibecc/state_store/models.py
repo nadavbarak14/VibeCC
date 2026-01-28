@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import uuid
-from datetime import datetime
+from datetime import datetime  # noqa: TC003 - used at runtime for SQLAlchemy
 from enum import Enum
 from typing import Any
 

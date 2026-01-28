@@ -1,6 +1,6 @@
 """Unit tests for State Store models."""
 
-import pytest
+from datetime import datetime
 
 from vibecc.state_store.models import (
     Pipeline,
@@ -149,8 +149,6 @@ class TestPipelineHistoryModel:
 
     def test_pipeline_history_model_fields(self) -> None:
         """All fields map correctly from Pipeline."""
-        from datetime import datetime
-
         history = PipelineHistory(
             project_id="proj-1",
             ticket_id="42",
@@ -178,8 +176,6 @@ class TestPipelineHistoryModel:
 
     def test_pipeline_history_nullable_pr_fields(self) -> None:
         """pr_id and pr_url can be null (for failed before PR)."""
-        from datetime import datetime
-
         history = PipelineHistory(
             project_id="proj-1",
             ticket_id="42",
@@ -193,8 +189,6 @@ class TestPipelineHistoryModel:
 
     def test_pipeline_history_final_state_property(self) -> None:
         """final_pipeline_state property converts to enum."""
-        from datetime import datetime
-
         history = PipelineHistory(
             project_id="proj-1",
             ticket_id="42",
@@ -207,8 +201,6 @@ class TestPipelineHistoryModel:
 
     def test_pipeline_history_model_repr(self) -> None:
         """PipelineHistory has a useful repr."""
-        from datetime import datetime
-
         history = PipelineHistory(
             id="hist-1",
             project_id="proj-1",

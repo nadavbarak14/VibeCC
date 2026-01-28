@@ -1,6 +1,7 @@
 """Integration tests for State Store database."""
 
 import tempfile
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -136,8 +137,6 @@ class TestModelRoundtrip:
 
     def test_model_roundtrip_history(self, database: Database) -> None:
         """Can insert and retrieve PipelineHistory."""
-        from datetime import datetime
-
         session = database.get_session()
 
         # Create history
@@ -235,8 +234,6 @@ class TestTimestamps:
 
     def test_timestamps_auto_set(self, database: Database) -> None:
         """created_at and updated_at populated automatically."""
-        from datetime import datetime, timedelta
-
         session = database.get_session()
 
         # Create project
