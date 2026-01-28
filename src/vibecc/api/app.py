@@ -9,7 +9,7 @@ from fastapi.responses import JSONResponse
 
 from vibecc.api.dependencies import close_state_store, init_event_manager, init_state_store
 from vibecc.api.models import APIResponse
-from vibecc.api.routes import control, events, history, pipelines, projects
+from vibecc.api.routes import control, events, history, pipelines, projects, sync
 from vibecc.state_store import (
     PipelineNotFoundError,
     ProjectExistsError,
@@ -103,6 +103,7 @@ def create_app(db_path: str = "vibecc.db") -> FastAPI:
     app.include_router(pipelines.router, prefix="/api/v1")
     app.include_router(history.router, prefix="/api/v1")
     app.include_router(control.router, prefix="/api/v1")
+    app.include_router(sync.router, prefix="/api/v1")
     app.include_router(events.router, prefix="/api/v1")
 
     return app

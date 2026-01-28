@@ -5,7 +5,11 @@ import { http, HttpResponse } from "msw";
 import { BoardPage } from "../BoardPage";
 import { renderWithProviders } from "../../test/test-utils";
 import { server } from "../../test/mocks/server";
-import type { AutopilotStatus, APIResponse } from "../../types/api";
+import type {
+  AutopilotStatus,
+  SyncResult,
+  APIResponse,
+} from "../../types/api";
 
 function renderBoard() {
   return renderWithProviders(<BoardPage />, {
@@ -142,5 +146,64 @@ describe("Board Control Integration", () => {
 
     await user.click(screen.getByTestId("settings-close-btn"));
     expect(screen.queryByTestId("settings-modal")).not.toBeInTheDocument();
+  });
+
+  it("syncs queue and shows success toast", async () => {
+    const user = userEvent.setup();
+    renderRunningBoard();
+
+    await waitFor(() => {
+      expect(screen.getByText("Frontend App")).toBeInTheDocument();
+    });
+
+    // proj-1 has queued_tickets: 5, so button should be enabled
+    await waitFor(() => {
+      expect(screen.getByTestId("sync-queue-btn")).toHaveTextContent(
+        "Sync Queue (5)",
+      );
+    });
+
+    await user.click(screen.getByTestId("sync-queue-btn"));
+
+    // Toast should appear with sync result
+    await waitFor(() => {
+      expect(
+        screen.getByText("Started 1 pipeline, 1 remaining"),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("shows error toast on sync failure", async () => {
+    const user = userEvent.setup();
+    renderRunningBoard();
+
+    await waitFor(() => {
+      expect(screen.getByText("Frontend App")).toBeInTheDocument();
+    });
+
+    // Override sync endpoint to return error
+    server.use(
+      http.post("/api/v1/projects/proj-1/sync", () => {
+        return HttpResponse.json(
+          {
+            data: null,
+            error: "Internal error",
+          } satisfies APIResponse<null>,
+          { status: 500 },
+        );
+      }),
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId("sync-queue-btn")).not.toBeDisabled();
+    });
+
+    await user.click(screen.getByTestId("sync-queue-btn"));
+
+    await waitFor(() => {
+      expect(
+        screen.getByText("Failed to sync queue"),
+      ).toBeInTheDocument();
+    });
   });
 });

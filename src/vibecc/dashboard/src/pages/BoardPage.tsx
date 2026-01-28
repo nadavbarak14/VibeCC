@@ -6,6 +6,7 @@ import { usePipelines } from "../hooks/usePipelines";
 import { useAutopilotStatus } from "../hooks/useAutopilotStatus";
 import { useStartAutopilot } from "../hooks/useStartAutopilot";
 import { useStopAutopilot } from "../hooks/useStopAutopilot";
+import { useSyncQueue } from "../hooks/useSyncQueue";
 import { useSSE } from "../hooks/useSSE";
 import { BoardHeader } from "../components/Board/BoardHeader";
 import { KanbanBoard } from "../components/Board/KanbanBoard";
@@ -15,7 +16,7 @@ import {
   ToastContainer,
   type ToastMessage,
 } from "../components/Control/Toast";
-import type { Pipeline, SSEEvent } from "../types/api";
+import type { Pipeline, SSEEvent, SyncResult } from "../types/api";
 
 let toastId = 0;
 
@@ -44,6 +45,7 @@ export function BoardPage() {
 
   const startMutation = useStartAutopilot(projectId!);
   const stopMutation = useStopAutopilot(projectId!);
+  const syncMutation = useSyncQueue(projectId!);
 
   const handleStart = useCallback(() => {
     startMutation.mutate(undefined, {
@@ -58,6 +60,20 @@ export function BoardPage() {
       onError: () => addToast("Failed to stop autopilot", "error"),
     });
   }, [stopMutation, addToast]);
+
+  const handleSyncQueue = useCallback(() => {
+    syncMutation.mutate(undefined, {
+      onSuccess: (data: SyncResult) => {
+        const count = data.started.length;
+        const msg =
+          count === 0
+            ? "No pipelines started"
+            : `Started ${count} pipeline${count > 1 ? "s" : ""}, ${data.remaining} remaining`;
+        addToast(msg, "success");
+      },
+      onError: () => addToast("Failed to sync queue", "error"),
+    });
+  }, [syncMutation, addToast]);
 
   const onEvent = useCallback(
     (event: SSEEvent) => {
@@ -116,6 +132,8 @@ export function BoardPage() {
         onStop={handleStop}
         isAutopilotLoading={startMutation.isPending || stopMutation.isPending}
         onSettingsClick={() => setShowSettings(true)}
+        onSyncQueue={handleSyncQueue}
+        isSyncLoading={syncMutation.isPending}
       />
       <KanbanBoard
         pipelines={pipelines ?? []}

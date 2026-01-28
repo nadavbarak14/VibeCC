@@ -6,6 +6,7 @@ import type {
   Pipeline,
   PipelineHistory,
   HistoryStats,
+  SyncResult,
   APIResponse,
 } from "../../types/api";
 
@@ -320,5 +321,26 @@ export const handlers = [
       data: { message: "Autopilot stopped" },
       error: null,
     } satisfies APIResponse<AutopilotAction>);
+  }),
+
+  http.post("/api/v1/projects/:projectId/sync", ({ params }) => {
+    const { projectId } = params;
+    const project = mockProjects.find((p) => p.id === projectId);
+    if (!project) {
+      return HttpResponse.json(
+        { data: null, error: "Project not found" } satisfies APIResponse<null>,
+        { status: 404 },
+      );
+    }
+    // Simulate starting the first queued pipeline
+    const queued = mockPipelines.filter(
+      (p) => p.project_id === projectId && p.state === "queued",
+    );
+    const started = queued.slice(0, 1);
+    const remaining = queued.length - started.length;
+    return HttpResponse.json({
+      data: { started, remaining },
+      error: null,
+    } satisfies APIResponse<SyncResult>);
   }),
 ];

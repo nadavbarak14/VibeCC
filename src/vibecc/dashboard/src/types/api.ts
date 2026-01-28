@@ -89,6 +89,11 @@ export interface AutopilotAction {
   message: string;
 }
 
+export interface SyncResult {
+  started: Pipeline[];
+  remaining: number;
+}
+
 export type SSEEventType =
   | "pipeline_created"
   | "pipeline_updated"

@@ -12,6 +12,7 @@ from vibecc.state_store import StateStore
 
 if TYPE_CHECKING:
     from vibecc.api.events import EventManager
+    from vibecc.scheduler import SyncResult
 
 
 @dataclass
@@ -121,3 +122,38 @@ def _get_event_manager_dep() -> Generator[EventManager, None, None]:
 
 # Type alias for dependency injection
 EventManagerDep = Annotated["EventManager", Depends(_get_event_manager_dep)]
+
+
+class SchedulerProtocol(Protocol):
+    """Interface for the Scheduler component."""
+
+    def sync(self, project_id: str) -> SyncResult:
+        """Process queue once, starting pipelines up to available capacity."""
+        ...
+
+
+# Global Scheduler instance (initialized on app startup)
+_scheduler: SchedulerProtocol | None = None
+
+
+def init_scheduler(scheduler: SchedulerProtocol) -> None:
+    """Initialize the global Scheduler instance."""
+    global _scheduler  # noqa: PLW0603
+    _scheduler = scheduler
+
+
+def close_scheduler() -> None:
+    """Close the global Scheduler instance."""
+    global _scheduler  # noqa: PLW0603
+    _scheduler = None
+
+
+def get_scheduler() -> Generator[SchedulerProtocol, None, None]:
+    """Dependency that provides the Scheduler instance."""
+    if _scheduler is None:
+        raise RuntimeError("Scheduler not initialized. Call init_scheduler() first.")
+    yield _scheduler
+
+
+# Type alias for dependency injection
+SchedulerDep = Annotated[SchedulerProtocol, Depends(get_scheduler)]

@@ -158,3 +158,13 @@ class AutopilotActionResponse(BaseModel):
     """Response model for autopilot actions (start/stop)."""
 
     message: str
+
+
+# Scheduler models
+
+
+class SyncResultResponse(BaseModel):
+    """Response model for a sync operation."""
+
+    started: list[PipelineResponse]
+    remaining: int
