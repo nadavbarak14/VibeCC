@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import subprocess
 from pathlib import Path
 
@@ -14,6 +15,8 @@ from vibecc.git_manager.exceptions import (
     PushError,
 )
 from vibecc.git_manager.models import PR, CIStatus
+
+logger = logging.getLogger("vibecc.git_manager")
 
 
 class GitManager:
@@ -102,15 +105,18 @@ class GitManager:
             BranchError: If branch creation fails
         """
         branch_name = f"ticket-{ticket_id}"
+        logger.info("Creating branch %s from %s", branch_name, base)
         try:
             # Fetch latest from origin
             self._run_git("fetch", "origin", base)
             # Create and checkout the new branch from origin/base
             self._run_git("checkout", "-b", branch_name, f"origin/{base}")
         except subprocess.CalledProcessError as e:
+            logger.error("Failed to create branch %s: %s", branch_name, e.stderr)
             raise BranchError(
                 f"Failed to create branch '{branch_name}' from '{base}': {e.stderr}"
             ) from e
+        logger.info("Created branch %s", branch_name)
         return branch_name
 
     def push(self, branch: str) -> None:
@@ -122,10 +128,13 @@ class GitManager:
         Raises:
             PushError: If push fails
         """
+        logger.info("Pushing branch %s to origin", branch)
         try:
             self._run_git("push", "-u", "origin", branch)
         except subprocess.CalledProcessError as e:
+            logger.error("Failed to push branch %s: %s", branch, e.stderr)
             raise PushError(f"Failed to push branch '{branch}': {e.stderr}") from e
+        logger.info("Pushed branch %s", branch)
 
     def create_pr(self, branch: str, title: str, body: str, base: str = "main") -> PR:
         """Create a pull request.
@@ -142,6 +151,7 @@ class GitManager:
         Raises:
             PRError: If PR creation fails
         """
+        logger.info("Creating PR: %s (%s -> %s)", title, branch, base)
         response = self.client.post(
             f"/repos/{self.repo}/pulls",
             json={
@@ -153,14 +163,17 @@ class GitManager:
         )
 
         if response.status_code != 201:
+            logger.error("Failed to create PR: %s", response.text)
             raise PRError(f"Failed to create PR: {response.status_code} - {response.text}")
 
         data = response.json()
-        return PR(
+        pr = PR(
             id=data["id"],
             url=data["html_url"],
             number=data["number"],
         )
+        logger.info("Created PR #%d: %s", pr.number, pr.url)
+        return pr
 
     def get_pr_ci_status(self, pr_number: int) -> CIStatus:
         """Get the CI status for a pull request.
@@ -219,10 +232,13 @@ class GitManager:
 
         # Map GitHub status to CIStatus
         if state == "success":
+            logger.debug("PR #%d CI status: SUCCESS", pr_number)
             return CIStatus.SUCCESS
         elif state == "pending":
+            logger.debug("PR #%d CI status: PENDING", pr_number)
             return CIStatus.PENDING
         else:  # failure, error
+            logger.debug("PR #%d CI status: FAILURE", pr_number)
             return CIStatus.FAILURE
 
     def merge_pr(self, pr_number: int) -> None:
@@ -234,6 +250,7 @@ class GitManager:
         Raises:
             MergeError: If merge fails
         """
+        logger.info("Merging PR #%d with rebase", pr_number)
         response = self.client.put(
             f"/repos/{self.repo}/pulls/{pr_number}/merge",
             json={
@@ -242,9 +259,11 @@ class GitManager:
         )
 
         if response.status_code != 200:
+            logger.error("Failed to merge PR #%d: %s", pr_number, response.text)
             raise MergeError(
                 f"Failed to merge PR {pr_number}: {response.status_code} - {response.text}"
             )
+        logger.info("Merged PR #%d", pr_number)
 
     def delete_branch(self, branch: str) -> None:
         """Delete a remote branch.
@@ -255,10 +274,13 @@ class GitManager:
         Raises:
             BranchError: If deletion fails
         """
+        logger.info("Deleting remote branch %s", branch)
         response = self.client.delete(f"/repos/{self.repo}/git/refs/heads/{branch}")
 
         # 204 = success, 422 = branch already deleted
         if response.status_code not in (204, 422):
+            logger.error("Failed to delete branch %s: %s", branch, response.text)
             raise BranchError(
                 f"Failed to delete branch '{branch}': {response.status_code} - {response.text}"
             )
+        logger.info("Deleted branch %s", branch)

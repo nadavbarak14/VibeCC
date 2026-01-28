@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import subprocess
 from typing import TYPE_CHECKING
 
@@ -9,6 +10,8 @@ from vibecc.workers.models import CodingResult, CodingTask
 
 if TYPE_CHECKING:
     from subprocess import CompletedProcess
+
+logger = logging.getLogger("vibecc.workers.coder")
 
 
 class CoderWorker:
@@ -59,12 +62,29 @@ class CoderWorker:
         Returns:
             CodingResult with success status and output.
         """
+        logger.info("Executing coding task for ticket #%s: %s", task.ticket_id, task.ticket_title)
+        if task.feedback:
+            logger.info("Task includes CI feedback from previous attempt")
+
         prompt = self.build_prompt(task)
+        logger.debug("Built prompt (%d chars)", len(prompt))
 
         try:
+            logger.info("Running Claude Code CLI...")
             result = self._run_claude_code(prompt, task.repo_path)
-            return self._process_result(result)
+            coding_result = self._process_result(result)
+            if coding_result.success:
+                logger.info("Claude Code completed successfully")
+            else:
+                logger.error("Claude Code failed: %s", coding_result.error)
+            logger.debug(
+                "Output (%d chars): %s",
+                len(coding_result.output),
+                coding_result.output[:500] if coding_result.output else "(empty)",
+            )
+            return coding_result
         except subprocess.TimeoutExpired as e:
+            logger.error("Claude Code timed out after %s seconds", self.timeout)
             output = ""
             if e.stdout:
                 output = (
@@ -78,12 +98,14 @@ class CoderWorker:
                 error=f"Claude Code timed out after {self.timeout} seconds",
             )
         except FileNotFoundError:
+            logger.error("Claude Code CLI not found in PATH")
             return CodingResult(
                 success=False,
                 output="",
                 error="Claude Code CLI not found. Ensure 'claude' is installed and in PATH.",
             )
         except OSError as e:
+            logger.error("Failed to execute Claude Code: %s", e)
             return CodingResult(
                 success=False,
                 output="",

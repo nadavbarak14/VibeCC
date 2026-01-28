@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import time
 
 from vibecc.git_manager import CIStatus, GitManager
 from vibecc.workers.models import TestingResult, TestingTask
+
+logger = logging.getLogger("vibecc.workers.testing")
 
 
 class TestingRunner:
@@ -43,6 +46,8 @@ class TestingRunner:
         Returns:
             TestingResult with PR info and CI status.
         """
+        logger.info("Executing testing task for ticket #%s: %s", task.ticket_id, task.ticket_title)
+
         # Push branch to origin
         self.git_manager.push(task.branch)
 
@@ -52,22 +57,29 @@ class TestingRunner:
             title=f"#{task.ticket_id}: {task.ticket_title}",
             body=f"Closes #{task.ticket_id}",
         )
+        logger.info("Created PR #%d: %s", pr.number, pr.url)
 
         # Poll CI status until complete
+        logger.info("Polling CI status (interval=%ds)...", self.poll_interval)
         ci_status = self._poll_ci_status(pr.number)
+        logger.info("CI completed with status: %s", ci_status.value)
 
         # On failure, fetch logs
         failure_logs = None
         if ci_status == CIStatus.FAILURE:
+            logger.info("Fetching CI failure logs...")
             failure_logs = self._fetch_failure_logs(pr.number)
+            logger.debug("Failure logs: %s", failure_logs[:500] if failure_logs else "(none)")
 
-        return TestingResult(
+        result = TestingResult(
             success=ci_status == CIStatus.SUCCESS,
             pr_id=pr.id,
             pr_url=pr.url,
             ci_status=ci_status,
             failure_logs=failure_logs,
         )
+        logger.info("Testing task completed: success=%s", result.success)
+        return result
 
     def _poll_ci_status(self, pr_number: int) -> CIStatus:
         """Poll CI status until complete or max polls reached.
@@ -81,15 +93,17 @@ class TestingRunner:
         polls = 0
         while True:
             status = self.git_manager.get_pr_ci_status(pr_number)
+            logger.debug("Poll %d: CI status = %s", polls + 1, status.value)
 
             if status != CIStatus.PENDING:
                 return status
 
             polls += 1
             if self.max_polls is not None and polls >= self.max_polls:
-                # Treat timeout as failure
+                logger.warning("Max polls (%d) reached, treating as failure", self.max_polls)
                 return CIStatus.FAILURE
 
+            logger.debug("CI pending, waiting %ds before next poll...", self.poll_interval)
             time.sleep(self.poll_interval)
 
     def _fetch_failure_logs(self, pr_number: int) -> str:

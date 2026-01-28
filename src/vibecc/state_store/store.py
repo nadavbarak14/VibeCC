@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 
 from sqlalchemy import case, func, select
@@ -22,6 +23,8 @@ from vibecc.state_store.models import (
     PipelineState,
     Project,
 )
+
+logger = logging.getLogger("vibecc.state_store")
 
 
 class StateStore:
@@ -72,6 +75,7 @@ class StateStore:
         Raises:
             ProjectExistsError: If project with same repo already exists
         """
+        logger.info("Creating project: %s (%s)", name, repo)
         session = self._db.get_session()
         try:
             project = Project(
@@ -85,10 +89,12 @@ class StateStore:
             session.add(project)
             session.commit()
             session.refresh(project)
+            logger.info("Created project %s", project.id)
             return project
         except IntegrityError as e:
             session.rollback()
             if "UNIQUE constraint failed" in str(e) or "projects.repo" in str(e):
+                logger.error("Project with repo %s already exists", repo)
                 raise ProjectExistsError(f"Project with repo '{repo}' already exists") from e
             raise
         finally:
@@ -289,6 +295,12 @@ class StateStore:
             session.add(pipeline)
             session.commit()
             session.refresh(pipeline)
+            logger.info(
+                "Created pipeline %s for ticket #%s (%s)",
+                pipeline.id,
+                ticket_id,
+                branch_name,
+            )
             return pipeline
         finally:
             session.close()
@@ -404,21 +416,29 @@ class StateStore:
             if pipeline is None:
                 raise PipelineNotFoundError(f"Pipeline with id '{pipeline_id}' not found")
 
+            updates = []
             if state is not None:
+                updates.append(f"state={state.value}")
                 pipeline.state = state.value
             if pr_id is not None:
+                updates.append(f"pr_id={pr_id}")
                 pipeline.pr_id = pr_id
             if pr_url is not None:
+                updates.append(f"pr_url={pr_url}")
                 pipeline.pr_url = pr_url
             if retry_count_ci is not None:
+                updates.append(f"retry_count_ci={retry_count_ci}")
                 pipeline.retry_count_ci = retry_count_ci
             if retry_count_review is not None:
+                updates.append(f"retry_count_review={retry_count_review}")
                 pipeline.retry_count_review = retry_count_review
             if feedback is not None:
+                updates.append("feedback=(set)")
                 pipeline.feedback = feedback
 
             session.commit()
             session.refresh(pipeline)
+            logger.info("Updated pipeline %s: %s", pipeline_id, ", ".join(updates))
             return pipeline
         finally:
             session.close()
