@@ -120,12 +120,8 @@ class TestConcurrentProjectCreation:
                 errors.append(e)
 
         # Create two projects concurrently
-        thread1 = threading.Thread(
-            target=create_project, args=("Project A", "owner/repo-a")
-        )
-        thread2 = threading.Thread(
-            target=create_project, args=("Project B", "owner/repo-b")
-        )
+        thread1 = threading.Thread(target=create_project, args=("Project A", "owner/repo-a"))
+        thread2 = threading.Thread(target=create_project, args=("Project B", "owner/repo-b"))
 
         thread1.start()
         thread2.start()

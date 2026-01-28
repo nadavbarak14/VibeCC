@@ -218,9 +218,7 @@ class StateStore:
             )
             active_pipeline = session.execute(stmt).scalar_one_or_none()
             if active_pipeline is not None:
-                raise ProjectHasActivePipelinesError(
-                    f"Project '{project_id}' has active pipelines"
-                )
+                raise ProjectHasActivePipelinesError(f"Project '{project_id}' has active pipelines")
 
             session.delete(project)
             session.commit()

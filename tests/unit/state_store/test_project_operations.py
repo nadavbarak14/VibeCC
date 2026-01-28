@@ -228,9 +228,7 @@ class TestDeleteProject:
 
         assert project.id in str(exc_info.value)
 
-    def test_delete_project_with_completed_pipeline_succeeds(
-        self, store: StateStore
-    ) -> None:
+    def test_delete_project_with_completed_pipeline_succeeds(self, store: StateStore) -> None:
         """Can delete project with only completed (MERGED/FAILED) pipelines."""
         project = store.create_project(name="Test", repo="owner/repo")
 
