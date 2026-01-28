@@ -53,3 +53,34 @@ export interface LogEntry {
   message: string;
   timestamp: string;
 }
+
+export interface PipelineHistory {
+  id: string;
+  project_id: string;
+  ticket_id: string;
+  ticket_title: string;
+  final_state: "merged" | "failed";
+  branch_name: string;
+  pr_id: number | null;
+  pr_url: string | null;
+  total_retries_ci: number;
+  total_retries_review: number;
+  started_at: string;
+  completed_at: string;
+  duration_seconds: number;
+}
+
+export interface HistoryStats {
+  total_completed: number;
+  total_merged: number;
+  total_failed: number;
+  avg_duration_seconds: number;
+  avg_retries_ci: number;
+  avg_retries_review: number;
+}
+
+export interface HistoryFilters {
+  final_state?: "merged" | "failed";
+  limit?: number;
+  offset?: number;
+}

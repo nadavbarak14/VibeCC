@@ -3,6 +3,8 @@ import type {
   Project,
   AutopilotStatus,
   Pipeline,
+  PipelineHistory,
+  HistoryStats,
   APIResponse,
 } from "../../types/api";
 
@@ -145,6 +147,63 @@ export const mockPipelines: Pipeline[] = [
   },
 ];
 
+export const mockHistory: PipelineHistory[] = [
+  {
+    id: "hist-1",
+    project_id: "proj-1",
+    ticket_id: "90",
+    ticket_title: "Setup CI pipeline",
+    final_state: "merged",
+    branch_name: "ticket-90",
+    pr_id: 5,
+    pr_url: "https://github.com/acme/frontend/pull/5",
+    total_retries_ci: 1,
+    total_retries_review: 0,
+    started_at: "2024-01-05T10:00:00Z",
+    completed_at: "2024-01-05T11:30:00Z",
+    duration_seconds: 5400,
+  },
+  {
+    id: "hist-2",
+    project_id: "proj-1",
+    ticket_id: "91",
+    ticket_title: "Add authentication",
+    final_state: "merged",
+    branch_name: "ticket-91",
+    pr_id: 6,
+    pr_url: "https://github.com/acme/frontend/pull/6",
+    total_retries_ci: 0,
+    total_retries_review: 1,
+    started_at: "2024-01-06T09:00:00Z",
+    completed_at: "2024-01-06T12:00:00Z",
+    duration_seconds: 10800,
+  },
+  {
+    id: "hist-3",
+    project_id: "proj-1",
+    ticket_id: "92",
+    ticket_title: "Migrate database",
+    final_state: "failed",
+    branch_name: "ticket-92",
+    pr_id: 7,
+    pr_url: "https://github.com/acme/frontend/pull/7",
+    total_retries_ci: 3,
+    total_retries_review: 0,
+    started_at: "2024-01-07T08:00:00Z",
+    completed_at: "2024-01-07T10:00:00Z",
+    duration_seconds: 7200,
+  },
+];
+
+export const mockHistoryStats: HistoryStats = {
+  total_completed: 3,
+  total_merged: 2,
+  total_failed: 1,
+  avg_duration_seconds: 7800,
+  avg_retries_ci: 1.3,
+  avg_retries_review: 0.3,
+};
+
 export const handlers = [
   http.get("/api/v1/projects", () => {
     return HttpResponse.json({
@@ -193,5 +252,36 @@ export const handlers = [
       data: filtered,
       error: null,
     } satisfies APIResponse<Pipeline[]>);
+  }),
+
+  http.get("/api/v1/history", ({ request }) => {
+    const url = new URL(request.url);
+    const projectId = url.searchParams.get("project_id");
+    const finalState = url.searchParams.get("final_state");
+    let filtered = projectId
+      ? mockHistory.filter((h) => h.project_id === projectId)
+      : mockHistory;
+    if (finalState) {
+      filtered = filtered.filter((h) => h.final_state === finalState);
+    }
+    return HttpResponse.json({
+      data: filtered,
+      error: null,
+    } satisfies APIResponse<PipelineHistory[]>);
+  }),
+
+  http.get("/api/v1/history/stats", ({ request }) => {
+    const url = new URL(request.url);
+    const projectId = url.searchParams.get("project_id");
+    if (!projectId) {
+      return HttpResponse.json(
+        { data: null, error: "project_id required" } satisfies APIResponse<null>,
+        { status: 400 },
+      );
+    }
+    return HttpResponse.json({
+      data: mockHistoryStats,
+      error: null,
+    } satisfies APIResponse<HistoryStats>);
   }),
 ];
