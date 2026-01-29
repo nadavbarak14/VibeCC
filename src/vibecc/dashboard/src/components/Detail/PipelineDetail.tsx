@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { Pipeline, Project } from "../../types/api";
 import { useLogStream } from "../../hooks/useLogStream";
 import { Timeline } from "./Timeline";
@@ -21,6 +21,19 @@ export function PipelineDetail({
     pipelineId: pipeline.id,
     enabled: pipeline.state !== "merged" && pipeline.state !== "failed",
   });
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
 
   return (
     <>

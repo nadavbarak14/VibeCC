@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import type { Project } from "../../types/api";
 import { Button } from "../common/Button";
 
@@ -7,6 +8,19 @@ interface SettingsModalProps {
 }
 
 export function SettingsModal({ project, onClose }: SettingsModalProps) {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [onClose]);
+
   return (
     <>
       <div
