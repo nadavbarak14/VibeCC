@@ -10,6 +10,7 @@ import { useSyncQueue } from "../hooks/useSyncQueue";
 import { useSSE } from "../hooks/useSSE";
 import { BoardHeader } from "../components/Board/BoardHeader";
 import { KanbanBoard } from "../components/Board/KanbanBoard";
+import { KanbanSkeleton } from "../components/Board/KanbanSkeleton";
 import { PipelineDetail } from "../components/Detail/PipelineDetail";
 import { SettingsModal } from "../components/Control/SettingsModal";
 import {
@@ -108,8 +109,8 @@ export function BoardPage() {
 
   if (projectLoading || pipelinesLoading) {
     return (
-      <div className="py-12 text-center">
-        <p className="text-sm text-gray-500">Loading board...</p>
+      <div className="pt-4">
+        <KanbanSkeleton />
       </div>
     );
   }
