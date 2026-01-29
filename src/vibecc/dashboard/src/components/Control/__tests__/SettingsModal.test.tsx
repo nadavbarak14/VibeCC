@@ -56,4 +56,14 @@ describe("SettingsModal", () => {
     await user.click(screen.getByTestId("settings-overlay"));
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it("closes on Escape key press", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderWithProviders(
+      <SettingsModal project={mockProjects[0]} onClose={onClose} />,
+    );
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledOnce();
+  });
 });

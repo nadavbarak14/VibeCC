@@ -137,4 +137,18 @@ describe("PipelineDetail", () => {
     await user.click(screen.getByTestId("detail-overlay"));
     expect(onClose).toHaveBeenCalledOnce();
   });
+
+  it("calls onClose when Escape key pressed", async () => {
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    renderWithProviders(
+      <PipelineDetail
+        pipeline={queuedPipeline}
+        project={project}
+        onClose={onClose}
+      />,
+    );
+    await user.keyboard("{Escape}");
+    expect(onClose).toHaveBeenCalledOnce();
+  });
 });
