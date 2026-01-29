@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from vibecc.workers.models import CodingResult, CodingTask
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from subprocess import CompletedProcess
 
 logger = logging.getLogger("vibecc.workers.coder")
@@ -30,6 +31,7 @@ class CoderWorker:
                      None means no timeout (default for phase 1).
         """
         self.timeout = timeout
+        self.log_callback: Callable[[str], None] | None = None
 
     def build_prompt(self, task: CodingTask) -> str:
         """Build the prompt for Claude Code from task information.

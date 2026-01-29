@@ -48,7 +48,7 @@ def start_autopilot(
     start_worker(
         project_id=project_id,
         state_store=store,
-        orchestrator=orchestrator,
+        orchestrator=orchestrator,  # type: ignore[arg-type]
         repo_path=".",
         max_concurrent=1,
     )

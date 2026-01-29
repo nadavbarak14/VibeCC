@@ -3,26 +3,19 @@
 from __future__ import annotations
 
 from collections.abc import Generator  # noqa: TC003
-from dataclasses import dataclass
 from typing import TYPE_CHECKING, Annotated, Protocol
 
 from fastapi import Depends
 
+from vibecc.orchestrator.models import AutopilotStatus
 from vibecc.state_store import StateStore
 
 if TYPE_CHECKING:
     from vibecc.api.events import EventManager
     from vibecc.scheduler import SyncResult
 
-
-@dataclass
-class AutopilotStatus:
-    """Status of the autopilot for a project."""
-
-    project_id: str
-    running: bool
-    active_pipelines: int
-    queued_tickets: int
+# Re-export for backwards compatibility
+__all__ = ["AutopilotStatus"]
 
 
 class Orchestrator(Protocol):
@@ -32,7 +25,7 @@ class Orchestrator(Protocol):
         """Start autopilot for a project."""
         ...
 
-    def stop_autopilot(self, project_id: str) -> None:
+    def stop_autopilot(self, project_id: str, reason: str = ...) -> None:
         """Stop autopilot for a project."""
         ...
 
