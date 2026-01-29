@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import logging
 import subprocess
-from typing import TYPE_CHECKING
+import threading
+from collections.abc import Callable
 
 from vibecc.workers.models import CodingResult, CodingTask
-
-if TYPE_CHECKING:
-    from subprocess import CompletedProcess
 
 logger = logging.getLogger("vibecc.workers.coder")
 
@@ -18,28 +16,30 @@ class CoderWorker:
     """Worker that invokes Claude Code CLI for coding tasks.
 
     Builds a prompt from ticket information and invokes the Claude Code CLI
-    to complete the coding task. Captures output for logging and detects
+    to complete the coding task. Streams output in real-time and detects
     success/failure from the exit code.
     """
 
-    def __init__(self, timeout: int | None = None) -> None:
+    def __init__(
+        self,
+        timeout: int | None = None,
+        auto_commit: bool = True,
+        log_callback: Callable[[str], None] | None = None,
+    ) -> None:
         """Initialize the Coder Worker.
 
         Args:
             timeout: Optional timeout in seconds for Claude Code execution.
                      None means no timeout (default for phase 1).
+            auto_commit: If True, instruct Claude to commit changes after editing.
+            log_callback: Optional callback to stream log lines in real-time.
         """
         self.timeout = timeout
+        self.auto_commit = auto_commit
+        self.log_callback = log_callback
 
     def build_prompt(self, task: CodingTask) -> str:
-        """Build the prompt for Claude Code from task information.
-
-        Args:
-            task: The coding task with ticket information.
-
-        Returns:
-            Formatted prompt string for Claude Code.
-        """
+        """Build the prompt for Claude Code from task information."""
         prompt_parts = [
             f"You are working on ticket #{task.ticket_id}: {task.ticket_title}",
             "",
@@ -51,17 +51,17 @@ class CoderWorker:
 
         prompt_parts.extend(["", "Complete this ticket by modifying the necessary files."])
 
+        if self.auto_commit:
+            prompt_parts.extend([
+                "",
+                "IMPORTANT: After making all changes, you MUST commit them with a descriptive message.",
+                f"Use: git add -A && git commit -m '#{task.ticket_id}: <brief description>'",
+            ])
+
         return "\n".join(prompt_parts)
 
     def execute(self, task: CodingTask) -> CodingResult:
-        """Execute a coding task using Claude Code CLI.
-
-        Args:
-            task: The coding task to execute.
-
-        Returns:
-            CodingResult with success status and output.
-        """
+        """Execute a coding task using Claude Code CLI."""
         logger.info("Executing coding task for ticket #%s: %s", task.ticket_id, task.ticket_title)
         if task.feedback:
             logger.info("Task includes CI feedback from previous attempt")
@@ -71,32 +71,7 @@ class CoderWorker:
 
         try:
             logger.info("Running Claude Code CLI...")
-            result = self._run_claude_code(prompt, task.repo_path)
-            coding_result = self._process_result(result)
-            if coding_result.success:
-                logger.info("Claude Code completed successfully")
-            else:
-                logger.error("Claude Code failed: %s", coding_result.error)
-            logger.debug(
-                "Output (%d chars): %s",
-                len(coding_result.output),
-                coding_result.output[:500] if coding_result.output else "(empty)",
-            )
-            return coding_result
-        except subprocess.TimeoutExpired as e:
-            logger.error("Claude Code timed out after %s seconds", self.timeout)
-            output = ""
-            if e.stdout:
-                output = (
-                    e.stdout.decode("utf-8", errors="replace")
-                    if isinstance(e.stdout, bytes)
-                    else str(e.stdout)
-                )
-            return CodingResult(
-                success=False,
-                output=output,
-                error=f"Claude Code timed out after {self.timeout} seconds",
-            )
+            return self._run_claude_code(prompt, task.repo_path)
         except FileNotFoundError:
             logger.error("Claude Code CLI not found in PATH")
             return CodingResult(
@@ -112,47 +87,56 @@ class CoderWorker:
                 error=f"Failed to execute Claude Code: {e}",
             )
 
-    def _run_claude_code(self, prompt: str, repo_path: str) -> CompletedProcess[str]:
-        """Run the Claude Code CLI subprocess.
+    def _run_claude_code(self, prompt: str, repo_path: str) -> CodingResult:
+        """Run the Claude Code CLI subprocess with streaming output."""
+        cmd = ["claude", "-p", prompt, "--permission-mode", "acceptEdits"]
+        if self.auto_commit:
+            cmd.extend(["--allowedTools", "Bash(git:*)"])
 
-        Args:
-            prompt: The prompt to send to Claude Code.
-            repo_path: Working directory for the subprocess.
+        output_lines: list[str] = []
 
-        Returns:
-            CompletedProcess with stdout/stderr.
-        """
-        return subprocess.run(
-            ["claude", "-p", prompt, "--permission-mode", "acceptEdits"],
+        process = subprocess.Popen(
+            cmd,
             cwd=repo_path,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
-            timeout=self.timeout,
-            check=False,
+            bufsize=1,
         )
 
-    def _process_result(self, result: CompletedProcess[str]) -> CodingResult:
-        """Process the subprocess result into a CodingResult.
+        def read_output() -> None:
+            if process.stdout:
+                for line in process.stdout:
+                    line = line.rstrip("\n")
+                    output_lines.append(line)
+                    logger.debug("Claude: %s", line)
+                    if self.log_callback:
+                        self.log_callback(line)
 
-        Args:
-            result: The completed subprocess result.
+        reader_thread = threading.Thread(target=read_output)
+        reader_thread.start()
 
-        Returns:
-            CodingResult based on exit code and output.
-        """
-        # Combine stdout and stderr for complete output
-        output_parts = []
-        if result.stdout:
-            output_parts.append(result.stdout)
-        if result.stderr:
-            output_parts.append(result.stderr)
-        output = "\n".join(output_parts)
+        try:
+            process.wait(timeout=self.timeout)
+            reader_thread.join(timeout=5)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            reader_thread.join(timeout=5)
+            return CodingResult(
+                success=False,
+                output="\n".join(output_lines),
+                error=f"Claude Code timed out after {self.timeout} seconds",
+            )
 
-        if result.returncode == 0:
+        output = "\n".join(output_lines)
+
+        if process.returncode == 0:
+            logger.info("Claude Code completed successfully")
             return CodingResult(success=True, output=output, error=None)
         else:
+            logger.error("Claude Code exited with code %d", process.returncode)
             return CodingResult(
                 success=False,
                 output=output,
-                error=f"Claude Code exited with code {result.returncode}",
+                error=f"Claude Code exited with code {process.returncode}",
             )
