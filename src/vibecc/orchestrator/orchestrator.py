@@ -193,7 +193,7 @@ class Orchestrator:
                 case PipelineState.QUEUED:
                     self._process_queued(pipeline, project)
                 case PipelineState.CODING:
-                    self._process_coding(pipeline, project, coder_worker, repo_path)
+                    self._process_coding(pipeline, project, coder_worker, repo_path, git_manager)
                 case PipelineState.TESTING:
                     self._process_testing(
                         pipeline, project, git_manager, kanban, testing_runner, repo_path
@@ -249,18 +249,89 @@ class Orchestrator:
 
         self._log_pipeline(pipeline, "info", "Transitioned to CODING state")
 
+    def _ensure_branch_checked_out(
+        self,
+        pipeline: Pipeline,
+        project: Project,
+        git_manager: GitManager,
+    ) -> None:
+        """Ensure the pipeline's branch exists locally and is checked out."""
+        import subprocess
+
+        branch = pipeline.branch_name
+        base = project.base_branch
+
+        # Check if branch exists locally
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "--verify", branch],
+                cwd=git_manager.repo_path,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            branch_exists = result.returncode == 0
+        except Exception:
+            branch_exists = False
+
+        if not branch_exists:
+            self._log_pipeline(pipeline, "info", f"Creating branch {branch} from {base}")
+            try:
+                subprocess.run(
+                    ["git", "fetch", "origin", base],
+                    cwd=git_manager.repo_path,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+                subprocess.run(
+                    ["git", "checkout", "-b", branch, f"origin/{base}"],
+                    cwd=git_manager.repo_path,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+            except subprocess.CalledProcessError as e:
+                raise PipelineProcessingError(
+                    f"Failed to create branch {branch}: {e.stderr}"
+                ) from e
+        else:
+            self._log_pipeline(pipeline, "info", f"Checking out branch {branch}")
+            try:
+                subprocess.run(
+                    ["git", "checkout", branch],
+                    cwd=git_manager.repo_path,
+                    capture_output=True,
+                    text=True,
+                    check=True,
+                )
+            except subprocess.CalledProcessError as e:
+                raise PipelineProcessingError(
+                    f"Failed to checkout branch {branch}: {e.stderr}"
+                ) from e
+
     def _process_coding(
         self,
         pipeline: Pipeline,
         project: Project,
         coder_worker: CoderWorker,
         repo_path: str,
+        git_manager: GitManager,
     ) -> None:
         """Process a pipeline in CODING state.
 
         Runs the CoderWorker and transitions based on result.
         """
+        # Ensure branch exists and is checked out
+        self._ensure_branch_checked_out(pipeline, project, git_manager)
+
         self._log_pipeline(pipeline, "info", "Starting coding phase")
+
+        # Set up log streaming callback
+        def log_callback(line: str) -> None:
+            self._log_pipeline(pipeline, "info", f"[Claude] {line}")
+
+        coder_worker.log_callback = log_callback
 
         # Build coding task
         task = CodingTask(
@@ -343,6 +414,39 @@ class Orchestrator:
         # Stop autopilot for project
         self.stop_autopilot(project.id, reason="coding_failure")
 
+    def _fail_pipeline(
+        self,
+        pipeline: Pipeline,
+        project: Project,
+        reason: str,
+    ) -> None:
+        """Fail a pipeline with a given reason."""
+        previous_state = pipeline.state
+        self.state_store.update_pipeline(
+            pipeline.id,
+            state=PipelineState.FAILED,
+            feedback=reason,
+        )
+
+        self.event_manager.emit_pipeline_updated(
+            pipeline_id=pipeline.id,
+            project_id=project.id,
+            state=PipelineState.FAILED.value,
+            previous_state=previous_state,
+        )
+
+        self.event_manager.emit_pipeline_completed(
+            pipeline_id=pipeline.id,
+            project_id=project.id,
+            final_state=PipelineState.FAILED.value,
+        )
+
+        updated_pipeline = self.state_store.get_pipeline(pipeline.id)
+        self.state_store.save_to_history(updated_pipeline)
+
+        self._log_pipeline(pipeline, "info", "Pipeline failed")
+        self.stop_autopilot(project.id, reason="pipeline_failed")
+
     def _process_testing(
         self,
         pipeline: Pipeline,
@@ -366,8 +470,14 @@ class Orchestrator:
             repo_path=repo_path,
         )
 
-        # Execute testing task
-        result = testing_runner.execute(task)
+        # Execute testing task - catch errors and fail pipeline
+        try:
+            result = testing_runner.execute(task)
+        except Exception as e:
+            # Push/PR creation failed - fail the pipeline
+            self._log_pipeline(pipeline, "error", f"Testing setup failed: {e}")
+            self._fail_pipeline(pipeline, project, str(e))
+            return
 
         # Update PR info
         self.state_store.update_pipeline(
