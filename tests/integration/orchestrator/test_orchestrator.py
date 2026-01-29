@@ -2,7 +2,7 @@
 
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -61,7 +61,16 @@ def mock_git_manager() -> MagicMock:
     """Create a mock GitManager."""
     manager = MagicMock()
     manager.create_branch.return_value = "ticket-42"
+    manager.repo_path = "/tmp/test-repo"  # Real path for subprocess calls
     return manager
+
+
+@pytest.fixture(autouse=True)
+def mock_subprocess():
+    """Mock subprocess for branch checkout operations."""
+    with patch("vibecc.orchestrator.orchestrator.subprocess") as mock:
+        mock.run.return_value.returncode = 0
+        yield mock
 
 
 @pytest.fixture

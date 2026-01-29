@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import subprocess
 from typing import TYPE_CHECKING
 
 from vibecc.orchestrator.exceptions import PipelineProcessingError
@@ -256,8 +257,6 @@ class Orchestrator:
         git_manager: GitManager,
     ) -> None:
         """Ensure the pipeline's branch exists locally and is checked out."""
-        import subprocess
-
         branch = pipeline.branch_name
         base = project.base_branch
 

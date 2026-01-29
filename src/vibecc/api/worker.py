@@ -6,6 +6,8 @@ import logging
 import os
 import subprocess
 import threading
+import time
+import traceback
 from typing import TYPE_CHECKING
 
 from vibecc.git_manager import GitManager
@@ -40,7 +42,7 @@ def _get_github_token() -> str:
         return ""
 
 
-def start_worker_sync(
+def start_worker_sync(  # noqa: PLR0912, PLR0915
     project_id: str,
     state_store: StateStore,
     orchestrator: Orchestrator,
@@ -51,10 +53,6 @@ def start_worker_sync(
 
     This runs in a thread via BackgroundTasks.
     """
-    import sys
-    import time
-    import traceback
-
     print(f"[WORKER] Started for project {project_id}", flush=True)
     logger.info("Worker started for project %s", project_id)
 
@@ -109,7 +107,11 @@ def start_worker_sync(
             # If we have working pipelines, process them first
             if working_pipelines:
                 pipeline = working_pipelines[0]
-                print(f"[WORKER] Processing working pipeline #{pipeline.ticket_id} ({pipeline.pipeline_state.value})", flush=True)
+                state_val = pipeline.pipeline_state.value
+                print(
+                    f"[WORKER] Processing working pipeline #{pipeline.ticket_id} ({state_val})",
+                    flush=True,
+                )
             # Otherwise, if we have capacity, start a queued pipeline
             elif queued_count > 0 and working_count < max_concurrent:
                 pipeline = queued_pipelines[0]
@@ -117,7 +119,8 @@ def start_worker_sync(
             else:
                 # Nothing to do - either no pipelines or at capacity
                 if queued_count > 0:
-                    print(f"[WORKER] At capacity ({working_count}/{max_concurrent}), waiting...", flush=True)
+                    msg = f"[WORKER] At capacity ({working_count}/{max_concurrent}), waiting..."
+                    print(msg, flush=True)
                 else:
                     print("[WORKER] No pipelines to process, waiting...", flush=True)
                 time.sleep(2)
@@ -127,7 +130,12 @@ def start_worker_sync(
             if not orchestrator._autopilot_running.get(project_id, False):
                 break
 
-            print(f"[WORKER] Processing pipeline {pipeline.id} (ticket #{pipeline.ticket_id}, state={pipeline.pipeline_state.value})", flush=True)
+            state_val = pipeline.pipeline_state.value
+            print(
+                f"[WORKER] Processing pipeline {pipeline.id} "
+                f"(ticket #{pipeline.ticket_id}, state={state_val})",
+                flush=True,
+            )
             logger.info("Processing pipeline %s", pipeline.id)
 
             # Create adapters for this pipeline
@@ -147,7 +155,8 @@ def start_worker_sync(
             )
 
             try:
-                print(f"[WORKER] Calling orchestrator.process_pipeline for {pipeline.id}", flush=True)
+                msg = f"[WORKER] Calling orchestrator.process_pipeline for {pipeline.id}"
+                print(msg, flush=True)
                 # Process the pipeline through its current state
                 orchestrator.process_pipeline(
                     pipeline_id=pipeline.id,

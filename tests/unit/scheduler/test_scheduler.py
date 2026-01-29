@@ -74,10 +74,10 @@ class TestSyncPullsFromQueue:
 
 
 @pytest.mark.unit
-class TestSyncRespectsCapacity:
-    """Test that sync respects concurrency limits."""
+class TestSyncPullsAllTickets:
+    """Test that sync pulls all tickets into queue (unlimited queue model)."""
 
-    def test_sync_respects_capacity(
+    def test_sync_pulls_all_tickets(
         self,
         scheduler: Scheduler,
         mock_state_store: MagicMock,
@@ -86,10 +86,10 @@ class TestSyncRespectsCapacity:
         mock_git_manager: MagicMock,
         sample_tickets: list[Ticket],
     ) -> None:
-        """Only starts up to available capacity."""
-        mock_kanban.list_tickets.return_value = sample_tickets
+        """All tickets pulled into queue regardless of working pipeline count."""
+        mock_kanban.list_tickets.return_value = sample_tickets  # 3 tickets
 
-        # 1 active pipeline (CODING), so only 1 slot available (max_concurrent=2)
+        # Even with 1 active pipeline, all tickets should be pulled into queue
         def list_pipelines_side_effect(project_id: str, state: PipelineState) -> list:
             if state == PipelineState.CODING:
                 return [MagicMock()]
@@ -102,9 +102,10 @@ class TestSyncRespectsCapacity:
 
         result = scheduler.sync("project-1", mock_kanban, mock_git_manager)
 
-        assert mock_orchestrator.start_pipeline.call_count == 1
-        assert len(result.started) == 1
-        assert result.remaining == 2
+        # All tickets pulled into queue (unlimited queue model)
+        assert mock_orchestrator.start_pipeline.call_count == 3
+        assert len(result.started) == 3
+        assert result.remaining == 0
 
 
 @pytest.mark.unit
@@ -177,13 +178,15 @@ class TestSyncReturnsResult:
         mock_kanban.list_tickets.return_value = sample_tickets  # 3 tickets
         pipeline1 = MagicMock()
         pipeline2 = MagicMock()
-        mock_orchestrator.start_pipeline.side_effect = [pipeline1, pipeline2]
+        pipeline3 = MagicMock()
+        mock_orchestrator.start_pipeline.side_effect = [pipeline1, pipeline2, pipeline3]
 
         result = scheduler.sync("project-1", mock_kanban, mock_git_manager)
 
         assert isinstance(result, SyncResult)
-        assert len(result.started) == 2  # max_concurrent=2
-        assert result.remaining == 1  # 3 - 2 = 1
+        # All tickets pulled into queue (unlimited queue model)
+        assert len(result.started) == 3
+        assert result.remaining == 0
 
 
 @pytest.mark.unit
@@ -208,10 +211,10 @@ class TestSyncEmptyQueue:
 
 
 @pytest.mark.unit
-class TestSyncNoCapacity:
-    """Test sync when no capacity available."""
+class TestSyncAtMaxCapacity:
+    """Test sync when at max capacity (still pulls all tickets)."""
 
-    def test_sync_no_capacity(
+    def test_sync_at_max_capacity_still_queues(
         self,
         scheduler: Scheduler,
         mock_state_store: MagicMock,
@@ -220,10 +223,14 @@ class TestSyncNoCapacity:
         mock_git_manager: MagicMock,
         sample_tickets: list[Ticket],
     ) -> None:
-        """Returns zero started when at max capacity."""
-        mock_kanban.list_tickets.return_value = sample_tickets
+        """All tickets still pulled into queue even when at max capacity.
 
-        # 2 active pipelines = max_concurrent, so no capacity
+        The unlimited queue model means sync always pulls all tickets.
+        max_concurrent only affects when pipelines start processing.
+        """
+        mock_kanban.list_tickets.return_value = sample_tickets  # 3 tickets
+
+        # Even with 2 active pipelines = max_concurrent, tickets are still pulled
         def list_pipelines_side_effect(project_id: str, state: PipelineState) -> list:
             if state == PipelineState.CODING:
                 return [MagicMock()]
@@ -232,9 +239,11 @@ class TestSyncNoCapacity:
             return []
 
         mock_state_store.list_pipelines.side_effect = list_pipelines_side_effect
+        mock_orchestrator.start_pipeline.return_value = MagicMock()
 
         result = scheduler.sync("project-1", mock_kanban, mock_git_manager)
 
-        assert result.started == []
-        assert result.remaining == 3
-        mock_orchestrator.start_pipeline.assert_not_called()
+        # All tickets pulled into QUEUED state
+        assert len(result.started) == 3
+        assert result.remaining == 0
+        assert mock_orchestrator.start_pipeline.call_count == 3

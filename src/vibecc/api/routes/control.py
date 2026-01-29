@@ -1,6 +1,6 @@
 """Control endpoints for Orchestrator (autopilot)."""
 
-from fastapi import APIRouter, BackgroundTasks
+from fastapi import APIRouter
 
 from vibecc.api.dependencies import OrchestratorDep, StateStoreDep
 from vibecc.api.models import (
@@ -37,7 +37,6 @@ def start_autopilot(
     project_id: str,
     store: StateStoreDep,
     orchestrator: OrchestratorDep,
-    background_tasks: BackgroundTasks,
 ) -> APIResponse[AutopilotActionResponse]:
     """Start autopilot for a project."""
     # Verify project exists (will raise ProjectNotFoundError if not)

@@ -1,10 +1,12 @@
 """FastAPI application setup."""
 
+from __future__ import annotations
+
 import os
 import subprocess
-from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -28,6 +30,13 @@ from vibecc.state_store import (
     ProjectNotFoundError,
     StateStoreError,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+    from vibecc.orchestrator import Orchestrator
+    from vibecc.scheduler import SyncResult
+    from vibecc.state_store import StateStore
 
 
 def _get_github_token() -> str:
@@ -55,8 +64,8 @@ class AppScheduler:
 
     def __init__(
         self,
-        state_store: "StateStore",
-        orchestrator: "Orchestrator",
+        state_store: StateStore,
+        orchestrator: Orchestrator,
         token: str,
         repo_path: str | Path = ".",
     ) -> None:
@@ -72,10 +81,10 @@ class AppScheduler:
             max_concurrent=1,
         )
 
-    def sync(self, project_id: str) -> "SyncResult":
+    def sync(self, project_id: str) -> SyncResult:
         from vibecc.git_manager import GitManager  # noqa: PLC0415
         from vibecc.kanban import KanbanAdapter  # noqa: PLC0415
-        from vibecc.scheduler import SyncResult  # noqa: PLC0415
+        from vibecc.scheduler import SyncResult  # noqa: PLC0415, F401
 
         project = self._state_store.get_project(project_id)
 

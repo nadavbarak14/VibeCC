@@ -1,6 +1,6 @@
 """Unit tests for Orchestrator."""
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -31,6 +31,7 @@ def mock_git_manager() -> MagicMock:
     """Create a mock GitManager."""
     manager = MagicMock()
     manager.create_branch.return_value = "ticket-42"
+    manager.repo_path = "/tmp/test-repo"  # Real path for subprocess calls
     return manager
 
 
@@ -212,8 +213,10 @@ class TestProcessQueuedState:
 class TestProcessCodingState:
     """Tests for processing CODING state."""
 
+    @patch("vibecc.orchestrator.orchestrator.subprocess")
     def test_coding_success_moves_to_testing(
         self,
+        mock_subprocess: MagicMock,
         orchestrator: Orchestrator,
         mock_state_store: MagicMock,
         mock_event_manager: MagicMock,
@@ -225,6 +228,9 @@ class TestProcessCodingState:
         sample_pipeline: MagicMock,
     ) -> None:
         """Coder success transitions to TESTING."""
+        # Mock subprocess for branch checkout
+        mock_subprocess.run.return_value.returncode = 0
+
         sample_pipeline.state = PipelineState.CODING.value
         sample_pipeline.pipeline_state = PipelineState.CODING
 
@@ -262,8 +268,10 @@ class TestProcessCodingState:
         call_kwargs = mock_event_manager.emit_pipeline_updated.call_args[1]
         assert call_kwargs["state"] == PipelineState.TESTING.value
 
+    @patch("vibecc.orchestrator.orchestrator.subprocess")
     def test_coding_failure_moves_to_failed(
         self,
+        mock_subprocess: MagicMock,
         orchestrator: Orchestrator,
         mock_state_store: MagicMock,
         mock_event_manager: MagicMock,
@@ -275,6 +283,9 @@ class TestProcessCodingState:
         sample_pipeline: MagicMock,
     ) -> None:
         """Coding failure moves to FAILED state."""
+        # Mock subprocess for branch checkout
+        mock_subprocess.run.return_value.returncode = 0
+
         sample_pipeline.state = PipelineState.CODING.value
         sample_pipeline.pipeline_state = PipelineState.CODING
 
@@ -513,8 +524,10 @@ class TestMaxRetries:
 class TestAutopilot:
     """Tests for autopilot management."""
 
+    @patch("vibecc.orchestrator.orchestrator.subprocess")
     def test_failed_stops_autopilot(
         self,
+        mock_subprocess: MagicMock,
         orchestrator: Orchestrator,
         mock_state_store: MagicMock,
         mock_event_manager: MagicMock,
@@ -526,6 +539,9 @@ class TestAutopilot:
         sample_pipeline: MagicMock,
     ) -> None:
         """Pipeline failure stops autopilot for project."""
+        # Mock subprocess for branch checkout
+        mock_subprocess.run.return_value.returncode = 0
+
         sample_pipeline.state = PipelineState.CODING.value
         sample_pipeline.pipeline_state = PipelineState.CODING
 
@@ -602,8 +618,10 @@ class TestEventEmission:
 class TestLogging:
     """Tests for logging functionality."""
 
+    @patch("vibecc.orchestrator.orchestrator.subprocess")
     def test_logs_all_steps(
         self,
+        mock_subprocess: MagicMock,
         orchestrator: Orchestrator,
         mock_state_store: MagicMock,
         mock_event_manager: MagicMock,
@@ -615,6 +633,9 @@ class TestLogging:
         sample_pipeline: MagicMock,
     ) -> None:
         """All actions logged for observability."""
+        # Mock subprocess for branch checkout
+        mock_subprocess.run.return_value.returncode = 0
+
         sample_pipeline.state = PipelineState.CODING.value
         sample_pipeline.pipeline_state = PipelineState.CODING
 
