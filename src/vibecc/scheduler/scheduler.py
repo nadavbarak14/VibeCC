@@ -16,9 +16,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Active (non-terminal) pipeline states
-_ACTIVE_STATES = [
-    PipelineState.QUEUED,
+# Working states - pipelines actively being processed (not queued)
+_WORKING_STATES = [
     PipelineState.CODING,
     PipelineState.TESTING,
     PipelineState.REVIEW,
@@ -28,8 +27,8 @@ _ACTIVE_STATES = [
 class Scheduler:
     """Processes tickets from Kanban queue into pipelines.
 
-    Phase 1 is manual-only: the user clicks a button which calls sync()
-    to process queued tickets up to available capacity.
+    Sync pulls ALL tickets from GitHub into the QUEUED state (unlimited queue).
+    max_concurrent only limits how many can be in CODING/TESTING/REVIEW at once.
     """
 
     def __init__(
@@ -43,7 +42,7 @@ class Scheduler:
         Args:
             state_store: StateStore instance for checking active pipelines.
             orchestrator: Orchestrator for starting pipelines.
-            max_concurrent: Maximum concurrent pipelines per project.
+            max_concurrent: Maximum concurrent working pipelines per project.
         """
         self.state_store = state_store
         self.orchestrator = orchestrator
@@ -55,7 +54,10 @@ class Scheduler:
         kanban: KanbanAdapter,
         git_manager: GitManager,
     ) -> SyncResult:
-        """Process the queue once, starting pipelines up to available capacity.
+        """Pull all tickets from GitHub queue into pipelines.
+
+        Pulls ALL tickets from GitHub "Todo" column into QUEUED state.
+        The queue can be unlimited - max_concurrent only limits working pipelines.
 
         Args:
             project_id: The project to sync.
@@ -68,38 +70,21 @@ class Scheduler:
         # Verify project exists
         self.state_store.get_project(project_id)
 
-        # Get tickets from queue
+        # Get tickets from GitHub queue
         tickets = kanban.list_tickets("queue")
-        logger.info("Found %d tickets in queue for project %s", len(tickets), project_id)
+        logger.info("Found %d tickets in GitHub queue for project %s", len(tickets), project_id)
 
         if not tickets:
             return SyncResult(started=[], remaining=0)
 
-        # Count active pipelines
-        active_count = 0
-        for state in _ACTIVE_STATES:
-            active_count += len(self.state_store.list_pipelines(project_id=project_id, state=state))
-
-        available_capacity = max(0, self.max_concurrent - active_count)
-        logger.info(
-            "Active: %d, capacity: %d, available: %d",
-            active_count,
-            self.max_concurrent,
-            available_capacity,
-        )
-
-        if available_capacity == 0:
-            return SyncResult(started=[], remaining=len(tickets))
-
-        # Start pipelines for available tickets
+        # Pull ALL tickets into QUEUED state (unlimited queue)
         started = []
-        for ticket in tickets[:available_capacity]:
-            logger.info("Starting pipeline for ticket #%s", ticket.id)
+        for ticket in tickets:
+            logger.info("Creating pipeline for ticket #%s", ticket.id)
             pipeline = self.orchestrator.start_pipeline(project_id, ticket, git_manager)
             kanban.move_ticket(ticket.id, "in_progress")
             started.append(pipeline)
 
-        remaining = len(tickets) - len(started)
-        logger.info("Sync complete: started %d, remaining %d", len(started), remaining)
+        logger.info("Sync complete: pulled %d tickets into queue", len(started))
 
-        return SyncResult(started=started, remaining=remaining)
+        return SyncResult(started=started, remaining=0)

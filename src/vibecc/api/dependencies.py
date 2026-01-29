@@ -45,10 +45,11 @@ class Orchestrator(Protocol):
 _state_store: StateStore | None = None
 
 
-def init_state_store(db_path: str = "vibecc.db") -> None:
+def init_state_store(db_path: str = "vibecc.db") -> StateStore:
     """Initialize the global StateStore instance."""
     global _state_store  # noqa: PLW0603
     _state_store = StateStore(db_path)
+    return _state_store
 
 
 def close_state_store() -> None:

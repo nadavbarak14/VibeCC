@@ -35,6 +35,10 @@ async def event_stream(
 
     async def generate() -> AsyncGenerator[str, None]:
         try:
+            # Send immediate heartbeat so the connection is established
+            heartbeat = em.create_heartbeat_event()
+            yield heartbeat.to_sse()
+
             while True:
                 try:
                     # Wait for event with timeout for heartbeat

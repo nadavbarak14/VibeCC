@@ -1,6 +1,6 @@
 """Control endpoints for Orchestrator (autopilot)."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, BackgroundTasks
 
 from vibecc.api.dependencies import OrchestratorDep, StateStoreDep
 from vibecc.api.models import (
@@ -9,6 +9,7 @@ from vibecc.api.models import (
     AutopilotStatusResponse,
     autopilot_status_to_response,
 )
+from vibecc.api.worker import start_worker, stop_worker
 
 router = APIRouter(tags=["control"])
 
@@ -33,13 +34,26 @@ def get_autopilot_status(
     response_model=APIResponse[AutopilotActionResponse],
 )
 def start_autopilot(
-    project_id: str, store: StateStoreDep, orchestrator: OrchestratorDep
+    project_id: str,
+    store: StateStoreDep,
+    orchestrator: OrchestratorDep,
+    background_tasks: BackgroundTasks,
 ) -> APIResponse[AutopilotActionResponse]:
     """Start autopilot for a project."""
     # Verify project exists (will raise ProjectNotFoundError if not)
     store.get_project(project_id)
 
     orchestrator.start_autopilot(project_id)
+
+    # Start background worker to process pipelines
+    start_worker(
+        project_id=project_id,
+        state_store=store,
+        orchestrator=orchestrator,
+        repo_path=".",
+        max_concurrent=1,
+    )
+
     return APIResponse(data=AutopilotActionResponse(message="Autopilot started"))
 
 
@@ -55,4 +69,8 @@ def stop_autopilot(
     store.get_project(project_id)
 
     orchestrator.stop_autopilot(project_id)
+
+    # Stop the background worker
+    stop_worker(project_id)
+
     return APIResponse(data=AutopilotActionResponse(message="Autopilot stopped"))

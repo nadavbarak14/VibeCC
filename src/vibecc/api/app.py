@@ -1,13 +1,24 @@
 """FastAPI application setup."""
 
+import os
+import subprocess
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from vibecc.api.dependencies import close_state_store, init_event_manager, init_state_store
+from vibecc.api.dependencies import (
+    close_orchestrator,
+    close_scheduler,
+    close_state_store,
+    init_event_manager,
+    init_orchestrator,
+    init_scheduler,
+    init_state_store,
+)
 from vibecc.api.models import APIResponse
 from vibecc.api.routes import control, events, history, pipelines, projects, sync
 from vibecc.state_store import (
@@ -19,19 +30,109 @@ from vibecc.state_store import (
 )
 
 
+def _get_github_token() -> str:
+    """Get GitHub token from environment or gh CLI."""
+    token = os.environ.get("GITHUB_TOKEN")
+    if token:
+        return token
+    try:
+        result = subprocess.run(
+            ["gh", "auth", "token"],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return ""
+
+
+class AppScheduler:
+    """App-level scheduler wrapper matching SchedulerProtocol.
+
+    Creates KanbanAdapter and GitManager per project and delegates to the real Scheduler.
+    """
+
+    def __init__(
+        self,
+        state_store: "StateStore",
+        orchestrator: "Orchestrator",
+        token: str,
+        repo_path: str | Path = ".",
+    ) -> None:
+        from vibecc.scheduler import Scheduler  # noqa: PLC0415
+
+        self._state_store = state_store
+        self._orchestrator = orchestrator
+        self._token = token
+        self._repo_path = Path(repo_path)
+        self._scheduler = Scheduler(
+            state_store=state_store,
+            orchestrator=orchestrator,
+            max_concurrent=1,
+        )
+
+    def sync(self, project_id: str) -> "SyncResult":
+        from vibecc.git_manager import GitManager  # noqa: PLC0415
+        from vibecc.kanban import KanbanAdapter  # noqa: PLC0415
+        from vibecc.scheduler import SyncResult  # noqa: PLC0415
+
+        project = self._state_store.get_project(project_id)
+
+        if not self._token:
+            raise RuntimeError("GitHub token not configured")
+        if not project.github_project_id:
+            raise RuntimeError(f"Project {project.name} has no github_project_id configured")
+
+        kanban = KanbanAdapter(
+            repo=project.repo,
+            project_number=project.github_project_id,
+            token=self._token,
+        )
+        git_manager = GitManager(
+            repo=project.repo,
+            token=self._token,
+            repo_path=self._repo_path,
+        )
+
+        try:
+            return self._scheduler.sync(project_id, kanban, git_manager)
+        finally:
+            kanban.close()
+            git_manager.close()
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Application lifespan manager."""
+    from vibecc.orchestrator import Orchestrator  # noqa: PLC0415
+
     # Startup
     db_path = app.state.db_path if hasattr(app.state, "db_path") else "vibecc.db"
-    init_state_store(db_path)
-    init_event_manager()
+    repo_path = app.state.repo_path if hasattr(app.state, "repo_path") else "."
+    store = init_state_store(db_path)
+    event_manager = init_event_manager()
+
+    orchestrator = Orchestrator(state_store=store, event_manager=event_manager)
+    init_orchestrator(orchestrator)
+
+    token = _get_github_token()
+    scheduler = AppScheduler(
+        state_store=store,
+        orchestrator=orchestrator,
+        token=token,
+        repo_path=repo_path,
+    )
+    init_scheduler(scheduler)
+
     yield
     # Shutdown
+    close_scheduler()
+    close_orchestrator()
     close_state_store()
 
 
-def create_app(db_path: str = "vibecc.db") -> FastAPI:
+def create_app(db_path: str = "vibecc.db", repo_path: str = ".") -> FastAPI:
     """Create and configure the FastAPI application."""
     app = FastAPI(
         title="VibeCC API",
@@ -40,8 +141,9 @@ def create_app(db_path: str = "vibecc.db") -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Store db_path for lifespan manager
+    # Store config for lifespan manager
     app.state.db_path = db_path
+    app.state.repo_path = repo_path
 
     # CORS middleware
     app.add_middleware(

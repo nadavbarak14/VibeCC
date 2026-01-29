@@ -58,9 +58,8 @@ class Orchestrator:
         """
         project = self.state_store.get_project(project_id)
 
-        # Count active pipelines (non-terminal states)
+        # Count active pipelines (in-progress states)
         active_states = [
-            PipelineState.QUEUED,
             PipelineState.CODING,
             PipelineState.TESTING,
             PipelineState.REVIEW,
@@ -70,9 +69,11 @@ class Orchestrator:
             pipelines = self.state_store.list_pipelines(project_id=project_id, state=state)
             active_pipelines += len(pipelines)
 
-        # Count queued tickets (this would require kanban access)
-        # For now, return 0 as we don't have kanban adapter in basic status check
-        queued_tickets = 0
+        # Count queued pipelines
+        queued_pipelines = self.state_store.list_pipelines(
+            project_id=project_id, state=PipelineState.QUEUED
+        )
+        queued_tickets = len(queued_pipelines)
 
         return AutopilotStatus(
             project_id=project.id,
