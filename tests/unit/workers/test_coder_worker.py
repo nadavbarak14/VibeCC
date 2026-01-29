@@ -1,6 +1,7 @@
 """Unit tests for Coder Worker."""
 
 import subprocess
+from io import StringIO
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -53,6 +54,15 @@ class TestBuildPrompt:
         assert task.ticket_body in prompt
         assert "Complete this ticket" in prompt
 
+    def test_prompt_includes_commit_instructions(
+        self, worker: CoderWorker, task: CodingTask
+    ) -> None:
+        """Prompt includes commit instructions."""
+        prompt = worker.build_prompt(task)
+
+        assert "commit" in prompt.lower()
+        assert f"#{task.ticket_id}" in prompt
+
     def test_execute_includes_feedback(
         self, worker: CoderWorker, task_with_feedback: CodingTask
     ) -> None:
@@ -61,6 +71,7 @@ class TestBuildPrompt:
 
         assert task_with_feedback.feedback in prompt
         assert "Previous CI Feedback" in prompt
+        assert "Fix the following issues" in prompt
 
     def test_prompt_no_feedback_section_when_none(
         self, worker: CoderWorker, task: CodingTask
@@ -71,22 +82,30 @@ class TestBuildPrompt:
         assert "Previous CI Feedback" not in prompt
 
 
+def create_mock_popen(returncode: int, output_lines: list[str]) -> MagicMock:
+    """Create a mock Popen object that simulates streaming output."""
+    mock_process = MagicMock()
+    mock_process.returncode = returncode
+    mock_process.stdout = StringIO("\n".join(output_lines) + "\n" if output_lines else "")
+    mock_process.wait = MagicMock(return_value=returncode)
+    return mock_process
+
+
 @pytest.mark.unit
 class TestExecute:
     """Tests for execute method."""
 
     def test_execute_calls_claude_cli(self, worker: CoderWorker, task: CodingTask) -> None:
         """Subprocess called correctly."""
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "Task completed successfully"
-        mock_result.stderr = ""
+        mock_process = create_mock_popen(0, ["Task completed successfully"])
 
-        with patch("vibecc.workers.coder.subprocess.run", return_value=mock_result) as mock_run:
+        with patch(
+            "vibecc.workers.coder.subprocess.Popen", return_value=mock_process
+        ) as mock_popen:
             worker.execute(task)
 
-            mock_run.assert_called_once()
-            call_args = mock_run.call_args
+            mock_popen.assert_called_once()
+            call_args = mock_popen.call_args
 
             # Check command
             assert call_args[0][0] == [
@@ -99,17 +118,14 @@ class TestExecute:
 
             # Check kwargs
             assert call_args[1]["cwd"] == task.repo_path
-            assert call_args[1]["capture_output"] is True
+            assert call_args[1]["stdout"] == subprocess.PIPE
             assert call_args[1]["text"] is True
 
     def test_execute_success_returns_result(self, worker: CoderWorker, task: CodingTask) -> None:
         """Success result on exit 0."""
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "Successfully modified files"
-        mock_result.stderr = ""
+        mock_process = create_mock_popen(0, ["Successfully modified files"])
 
-        with patch("vibecc.workers.coder.subprocess.run", return_value=mock_result):
+        with patch("vibecc.workers.coder.subprocess.Popen", return_value=mock_process):
             result = worker.execute(task)
 
             assert result.success is True
@@ -118,12 +134,9 @@ class TestExecute:
 
     def test_execute_failure_returns_error(self, worker: CoderWorker, task: CodingTask) -> None:
         """Failure result on non-zero exit."""
-        mock_result = MagicMock()
-        mock_result.returncode = 1
-        mock_result.stdout = "Some output"
-        mock_result.stderr = "Error occurred"
+        mock_process = create_mock_popen(1, ["Some output", "Error occurred"])
 
-        with patch("vibecc.workers.coder.subprocess.run", return_value=mock_result):
+        with patch("vibecc.workers.coder.subprocess.Popen", return_value=mock_process):
             result = worker.execute(task)
 
             assert result.success is False
@@ -134,16 +147,29 @@ class TestExecute:
 
     def test_execute_captures_output(self, worker: CoderWorker, task: CodingTask) -> None:
         """Output captured for logging."""
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = "stdout content"
-        mock_result.stderr = "stderr content"
+        mock_process = create_mock_popen(0, ["line 1", "line 2", "line 3"])
 
-        with patch("vibecc.workers.coder.subprocess.run", return_value=mock_result):
+        with patch("vibecc.workers.coder.subprocess.Popen", return_value=mock_process):
             result = worker.execute(task)
 
-            assert "stdout content" in result.output
-            assert "stderr content" in result.output
+            assert "line 1" in result.output
+            assert "line 2" in result.output
+            assert "line 3" in result.output
+
+    def test_execute_streams_to_callback(self, worker: CoderWorker, task: CodingTask) -> None:
+        """Output is streamed to log callback."""
+        mock_process = create_mock_popen(0, ["line 1", "line 2"])
+        streamed_lines: list[str] = []
+
+        def callback(line: str) -> None:
+            streamed_lines.append(line)
+
+        worker.log_callback = callback
+
+        with patch("vibecc.workers.coder.subprocess.Popen", return_value=mock_process):
+            worker.execute(task)
+
+            assert streamed_lines == ["line 1", "line 2"]
 
 
 @pytest.mark.unit
@@ -154,19 +180,25 @@ class TestErrorHandling:
         """Timeout returns error result."""
         worker = CoderWorker(timeout=30)
 
-        with patch(
-            "vibecc.workers.coder.subprocess.run",
-            side_effect=subprocess.TimeoutExpired(cmd="claude", timeout=30),
-        ):
+        # Create a mock process that times out
+        mock_process = MagicMock()
+        mock_process.stdout = iter([])  # Empty iterator
+        mock_process.wait = MagicMock(
+            side_effect=subprocess.TimeoutExpired(cmd="claude", timeout=30)
+        )
+        mock_process.kill = MagicMock()
+
+        with patch("vibecc.workers.coder.subprocess.Popen", return_value=mock_process):
             result = worker.execute(task)
 
             assert result.success is False
             assert "timed out" in result.error.lower()
+            mock_process.kill.assert_called_once()
 
     def test_execute_handles_cli_not_found(self, worker: CoderWorker, task: CodingTask) -> None:
         """FileNotFoundError when CLI not installed."""
         with patch(
-            "vibecc.workers.coder.subprocess.run",
+            "vibecc.workers.coder.subprocess.Popen",
             side_effect=FileNotFoundError("claude not found"),
         ):
             result = worker.execute(task)
@@ -178,7 +210,7 @@ class TestErrorHandling:
     def test_execute_handles_os_error(self, worker: CoderWorker, task: CodingTask) -> None:
         """OSError returns error result."""
         with patch(
-            "vibecc.workers.coder.subprocess.run",
+            "vibecc.workers.coder.subprocess.Popen",
             side_effect=OSError("Permission denied"),
         ):
             result = worker.execute(task)
@@ -201,16 +233,13 @@ class TestTimeout:
         worker = CoderWorker(timeout=60)
         assert worker.timeout == 60
 
-    def test_timeout_passed_to_subprocess(self, task: CodingTask) -> None:
-        """Timeout passed to subprocess.run."""
+    def test_timeout_passed_to_wait(self, task: CodingTask) -> None:
+        """Timeout passed to process.wait()."""
         worker = CoderWorker(timeout=120)
 
-        mock_result = MagicMock()
-        mock_result.returncode = 0
-        mock_result.stdout = ""
-        mock_result.stderr = ""
+        mock_process = create_mock_popen(0, ["done"])
 
-        with patch("vibecc.workers.coder.subprocess.run", return_value=mock_result) as mock_run:
+        with patch("vibecc.workers.coder.subprocess.Popen", return_value=mock_process):
             worker.execute(task)
 
-            assert mock_run.call_args[1]["timeout"] == 120
+            mock_process.wait.assert_called_once_with(timeout=120)

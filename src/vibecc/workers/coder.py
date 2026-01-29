@@ -4,15 +4,23 @@ from __future__ import annotations
 
 import logging
 import subprocess
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from vibecc.workers.models import CodingResult, CodingTask
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from subprocess import CompletedProcess
 
 logger = logging.getLogger("vibecc.workers.coder")
+
+
+@dataclass
+class StreamingResult:
+    """Result from streaming subprocess execution."""
+
+    returncode: int
+    output: str
 
 
 class CoderWorker:
@@ -49,9 +57,23 @@ class CoderWorker:
         ]
 
         if task.feedback:
-            prompt_parts.extend(["", "## Previous CI Feedback", "", task.feedback])
+            prompt_parts.extend([
+                "",
+                "## Previous CI Feedback",
+                "",
+                "The CI pipeline failed on a previous attempt. Fix the following issues:",
+                "",
+                task.feedback,
+            ])
 
-        prompt_parts.extend(["", "Complete this ticket by modifying the necessary files."])
+        prompt_parts.extend([
+            "",
+            "## Instructions",
+            "",
+            "1. Complete this ticket by modifying the necessary files",
+            "2. After making all changes, commit them with a descriptive message",
+            f"3. The commit message should reference the ticket number (e.g., '#{task.ticket_id}')",
+        ])
 
         return "\n".join(prompt_parts)
 
@@ -114,47 +136,66 @@ class CoderWorker:
                 error=f"Failed to execute Claude Code: {e}",
             )
 
-    def _run_claude_code(self, prompt: str, repo_path: str) -> CompletedProcess[str]:
-        """Run the Claude Code CLI subprocess.
+    def _run_claude_code(self, prompt: str, repo_path: str) -> StreamingResult:
+        """Run the Claude Code CLI subprocess with streaming output.
 
         Args:
             prompt: The prompt to send to Claude Code.
             repo_path: Working directory for the subprocess.
 
         Returns:
-            CompletedProcess with stdout/stderr.
+            StreamingResult with return code and collected output.
         """
-        return subprocess.run(
-            ["claude", "-p", prompt, "--permission-mode", "acceptEdits"],
+        cmd = ["claude", "-p", prompt, "--permission-mode", "acceptEdits"]
+
+        # Use Popen for streaming output
+        process = subprocess.Popen(
+            cmd,
             cwd=repo_path,
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,  # Merge stderr into stdout for unified streaming
             text=True,
-            timeout=self.timeout,
-            check=False,
+            bufsize=1,  # Line buffered
         )
 
-    def _process_result(self, result: CompletedProcess[str]) -> CodingResult:
+        output_lines: list[str] = []
+        try:
+            # Stream output line by line
+            if process.stdout:
+                for raw_line in process.stdout:
+                    stripped_line = raw_line.rstrip("\n")
+                    output_lines.append(stripped_line)
+
+                    # Call log callback if set
+                    if self.log_callback:
+                        self.log_callback(stripped_line)
+
+            # Wait for process to complete
+            process.wait(timeout=self.timeout)
+        except subprocess.TimeoutExpired:
+            process.kill()
+            process.wait()
+            raise
+
+        return StreamingResult(
+            returncode=process.returncode or 0,
+            output="\n".join(output_lines),
+        )
+
+    def _process_result(self, result: StreamingResult) -> CodingResult:
         """Process the subprocess result into a CodingResult.
 
         Args:
-            result: The completed subprocess result.
+            result: The streaming subprocess result.
 
         Returns:
             CodingResult based on exit code and output.
         """
-        # Combine stdout and stderr for complete output
-        output_parts = []
-        if result.stdout:
-            output_parts.append(result.stdout)
-        if result.stderr:
-            output_parts.append(result.stderr)
-        output = "\n".join(output_parts)
-
         if result.returncode == 0:
-            return CodingResult(success=True, output=output, error=None)
+            return CodingResult(success=True, output=result.output, error=None)
         else:
             return CodingResult(
                 success=False,
-                output=output,
+                output=result.output,
                 error=f"Claude Code exited with code {result.returncode}",
             )
