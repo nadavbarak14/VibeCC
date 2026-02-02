@@ -1,24 +1,36 @@
 # student.spec
 
 ## Description
-Represents a student who can enroll in courses.
+A student who can enroll in courses.
 
-## Properties
-- id: unique identifier (generated)
-- email: unique email address
-- name: full name
-- status: active | inactive | suspended
-- createdAt: timestamp
-- updatedAt: timestamp
+Properties: id, email (unique), name, status (active/inactive/suspended),
+createdAt, updatedAt.
 
-## Constraints
-- Email must be unique across all students
-- Email must be valid format
-- Name cannot be empty
-- Status defaults to "active" on creation
+## API
+- create(name, email) -> Student
+  Creates student. Email must be unique.
+
+- get(id) -> Student | null
+  Returns student or null if not found.
+
+- getByEmail(email) -> Student | null
+  Finds student by email.
+
+- update(id, updates) -> Student
+  Updates student fields.
+
+- delete(id) -> bool
+  Soft-deletes (sets inactive). Fails if has active @entities/registration.
+
+- list(filters, pagination) -> list[Student]
+  Returns filtered, paginated students.
 
 ## Tests
-- Valid student has all required fields
-- Two students cannot share email
+- Create with valid data succeeds
+- Duplicate email rejected
 - Invalid email format rejected
-- Empty name rejected
+- Get returns student by ID
+- Get returns null for unknown ID
+- Update changes fields
+- Delete sets status inactive
+- Delete fails with active registrations

@@ -1,54 +1,32 @@
 # enrollment.spec
 
 ## Description
-Business logic for student enrollment in courses. Enforces all
-registration rules including prerequisites, capacity, and eligibility.
+Business logic for student enrollment. Enforces prerequisites,
+capacity limits, and prevents duplicates.
 
-This is the core service that coordinates between entities and
-enforces business rules that span multiple entities.
+Coordinates between @entities/student, @entities/course, and @entities/registration.
 
 ## API
 - enroll(studentId, courseId) -> Registration
-  Enrolls student in course after validating all rules.
-  Creates registration with status "confirmed".
+  Enrolls student after validating all rules.
+  Checks: student active, course open, prerequisites met, capacity available, not duplicate.
 
 - drop(studentId, courseId, reason) -> Registration
-  Student-initiated withdrawal from course.
-  Updates registration status to "dropped".
+  Student withdrawal. Cannot drop completed courses.
 
 - complete(studentId, courseId, grade) -> Registration
-  Marks enrollment as completed with final grade.
-  Updates registration status to "completed".
+  Marks as completed with grade. Required for prerequisite checks.
 
 - checkEligibility(studentId, courseId) -> EligibilityResult
-  Checks if student can enroll without making changes.
-  Returns detailed result with pass/fail and reasons.
+  Returns eligible (bool) and reasons (list) without making changes.
+  Reasons: student_not_found, student_not_active, course_not_found,
+  course_not_open, already_enrolled, prerequisites_not_met, course_full.
 
 - getEnrollments(studentId) -> list[Registration]
-  Returns all registrations for a student.
+  All courses a student is enrolled in.
 
 - getRoster(courseId) -> list[Registration]
-  Returns all registrations for a course.
-
-## Business Rules
-- Student must exist and be active
-- Course must exist and be open for registration
-- Student cannot enroll in same course twice
-- All prerequisites must be completed (status = "completed")
-- Course must have available capacity
-- Cannot drop a completed course
-- Cannot complete an already completed course
-
-## EligibilityResult Structure
-- eligible: boolean
-- reasons: list of failure reasons (empty if eligible)
-  - "student_not_found"
-  - "student_not_active"
-  - "course_not_found"
-  - "course_not_open"
-  - "already_enrolled"
-  - "prerequisites_not_met" (includes which ones)
-  - "course_full"
+  All students in a course.
 
 ## Tests
 - Enroll succeeds when all rules pass
@@ -58,16 +36,10 @@ enforces business rules that span multiple entities.
 - Enroll fails if course not open
 - Enroll fails if already enrolled
 - Enroll fails if prerequisites not met
-- Enroll fails if course at capacity
+- Enroll fails if course full
 - Drop succeeds for confirmed enrollment
 - Drop fails for completed enrollment
 - Complete sets grade and status
-- Complete fails if already completed
-- Eligibility check returns all failure reasons
-- Enrolling frees capacity slot on drop
-- Completed prerequisite allows enrollment
-
-## Mentions
-@entities/student
-@entities/course
-@entities/registration
+- Eligibility returns all failure reasons
+- Dropping frees capacity slot
+- Completed courses satisfy prerequisites

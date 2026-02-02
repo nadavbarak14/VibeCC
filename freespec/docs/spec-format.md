@@ -1,173 +1,120 @@
 # FreeSpec Format Reference
 
-This document defines the formal structure of `.spec` files.
-
 ## File Structure
-
-A spec file consists of a header and multiple sections:
 
 ```
 # filename.spec
 
-## Section1
-Content...
+## Description
+What this component does.
 
-## Section2
-Content...
-```
+## API
+Functions this component provides.
 
-## Header
-
-The first line should be a comment with the filename:
-
-```
-# component.spec
+## Tests
+What must pass.
 ```
 
 ## Sections
 
-### Description (Required)
+### Description
 
-High-level overview of what this component does.
+What the component does, its purpose, constraints, and context.
 
 ```
 ## Description
-Handles student enrollment in courses. Core business logic for the
-registration system. Must enforce prerequisites, capacity limits,
-and prevent duplicate registrations.
+Business logic for student enrollment. Enforces prerequisites,
+capacity limits, and prevents duplicates.
 
-Performance: Should handle 1000 concurrent registrations.
-Security: Only authenticated students can register themselves.
+Coordinates between @entities/student, @entities/course, and @entities/registration.
 ```
 
-**Contents:**
-- Purpose and responsibility of the component
-- Implementation details and algorithms
-- Business rules and constraints
-- Non-functional requirements (performance, security, scalability)
+Include:
+- Purpose and responsibility
+- Properties (for entities)
+- Constraints and business rules
+- Dependencies via @mentions
 
-### API (Required)
+### API
 
-Contract-level interface definitions. Format is flexible.
+Functions this component provides. Format: `name(params) -> ReturnType`
 
 ```
 ## API
-- register(studentId, courseId) -> Registration
-  Enrolls student in course. Returns registration record.
+- enroll(studentId, courseId) -> Registration
+  Enrolls student after validating all rules.
 
-- unregister(studentId, courseId) -> bool
-  Removes student from course. Returns success status.
+- checkEligibility(studentId, courseId) -> EligibilityResult
+  Returns eligible (bool) and reasons (list) without making changes.
 ```
 
-**Supported formats:**
-- Function signatures with descriptions
-- Natural language descriptions
-- Pseudo-code
-- Mixed formats
+For REST endpoints, use HTTP method and path:
 
-**Guidelines:**
-- Define inputs and outputs clearly
-- Describe behavior, not implementation
-- Include error conditions where relevant
+```
+## API
+- GET /students -> list[Student]
+  List students. Query: status, search, page, limit.
 
-### Tests (Required)
+- POST /students -> Student
+  Create student. Body: email, name. Returns 201.
+```
 
-Free-form use cases that MUST be fulfilled by the implementation.
+### Tests
+
+What must pass. Free-form list of test cases.
 
 ```
 ## Tests
-- Successfully register student in available course
-- Reject if student already registered for course
-- Reject if course at capacity
-- Reject if prerequisites not met
-```
-
-**Guidelines:**
-- Use "Must" for required behavior
-- Use "Should" for expected behavior
-- Include both success and failure cases
-- Reference @mentions for cross-component tests
-
-### Mentions (Optional)
-
-Explicit dependency declarations. Can also be inline in other sections.
-
-```
-## Mentions
-@student - Student entity and operations
-@course - Course entity with prerequisites and capacity
+- Enroll succeeds when all rules pass
+- Enroll fails if student not found
+- Enroll fails if prerequisites not met
+- Enroll fails if course full
 ```
 
 ## @ Mentions
 
-Dependencies are declared using `@` prefix:
+Reference other specs inline using `@path/name`:
 
-- `@component` - References another spec file
-- `@component.function` - References a specific function
-- `@component.type` - References a type definition
+- `@entities/student` - References student entity
+- `@services/enrollment` - References enrollment service
+- `@endpoints/courses` - References courses endpoint
 
-Mentions can appear:
-- In a dedicated Mentions section
-- Inline within Description, API, or Tests sections
+Mentions appear naturally in Description or API sections. No separate Mentions section needed.
 
 ## Types
 
-Types can be defined inline or reference standard types:
+Built-in: `string`, `int`, `float`, `bool`, `void`, `list[T]`, `T | null`
 
-**Built-in types:**
-- `string`, `int`, `float`, `bool`
-- `list[T]`, `dict[K, V]`, `optional[T]`
-- `void` (no return value)
-
-**Custom types:**
-- Defined in the component that owns them
-- Referenced via @mentions from other specs
-
-## Best Practices
-
-1. **Keep specs focused** - One component per file
-2. **Use clear names** - Function names should describe actions
-3. **Document edge cases** - Include error conditions in Tests
-4. **Link dependencies** - Use @mentions for cross-references
-5. **Be specific in Tests** - Vague tests lead to vague implementations
+Custom types are defined by the component that owns them (e.g., `Student`, `EligibilityResult`).
 
 ## Example
 
 ```
-# authentication.spec
+# enrollment.spec
 
 ## Description
-Handles user authentication and session management.
-Supports multiple auth methods: password, OAuth, API keys.
-Sessions expire after 24 hours of inactivity.
+Business logic for student enrollment. Enforces prerequisites,
+capacity limits, and prevents duplicates.
 
-Security: Passwords must be hashed with bcrypt.
-Rate limiting: Max 5 failed attempts per minute.
+Coordinates between @entities/student, @entities/course, and @entities/registration.
 
 ## API
-- login(email, password) -> Session
-  Authenticates user with credentials. Returns session token.
+- enroll(studentId, courseId) -> Registration
+  Enrolls student after validating all rules.
+  Checks: student active, course open, prerequisites met, capacity available.
 
-- logout(sessionId) -> bool
-  Invalidates the session. Returns success status.
+- drop(studentId, courseId, reason) -> Registration
+  Student withdrawal. Cannot drop completed courses.
 
-- validateSession(sessionId) -> User | null
-  Checks if session is valid. Returns user or null.
-
-- refreshSession(sessionId) -> Session
-  Extends session expiry. Returns updated session.
+- checkEligibility(studentId, courseId) -> EligibilityResult
+  Returns eligible (bool) and reasons (list) without making changes.
 
 ## Tests
-- Successful login with valid credentials
-- Reject login with invalid password
-- Reject login with unknown email
-- Lock account after 5 failed attempts
-- Session expires after 24 hours
-- Logout invalidates session immediately
-- Cannot use session after logout
-- Refresh extends expiry time
-
-## Mentions
-@user - User entity for credential storage
-@session - Session entity for token management
+- Enroll succeeds when all rules pass
+- Enroll fails if student not found
+- Enroll fails if course not open
+- Enroll fails if prerequisites not met
+- Enroll fails if course full
+- Drop succeeds for confirmed enrollment
+- Drop fails for completed enrollment
 ```
