@@ -21,3 +21,5 @@ Three sections only. No other labels.
 
 Reference other specs inline: `@entities/student`, `@services/enrollment`
 
+**Required:** You MUST @mention every spec your component depends on at least once.
+
