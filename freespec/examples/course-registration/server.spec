@@ -1,28 +1,22 @@
 # server.spec
 
-## Description
-HTTP server for the course registration system.
-Runs on configurable port (default 8080).
-All responses are JSON. Authentication via Bearer tokens.
+description:
+HTTP server for the course registration system. Runs on configurable port,
+default 8080. All responses are JSON. Authentication via Bearer tokens.
 
-Routes to @endpoints/students, @endpoints/courses, @endpoints/registrations.
+Routes requests to @endpoints/students, @endpoints/courses, @endpoints/registrations.
 
-Middleware: request logging, error handling, rate limiting.
+Includes middleware for request logging, error handling, and rate limiting.
 
-## API
-- start(config) -> Server
-  Initializes and starts the HTTP server.
+api:
+Start the server with configuration options.
+Stop the server gracefully, completing any pending requests.
+Health check endpoint that returns server status and uptime.
 
-- stop() -> void
-  Gracefully shuts down, completing pending requests.
-
-- healthCheck() -> HealthStatus
-  Returns server status and uptime.
-
-## Tests
-- Server starts on configured port
-- Health endpoint returns 200
-- Invalid routes return 404
-- Missing auth returns 401
-- Rate limiting triggers after threshold
-- Graceful shutdown completes pending requests
+tests:
+Server starts on configured port
+Health endpoint returns 200
+Invalid routes return 404
+Missing auth returns 401
+Rate limiting triggers after threshold
+Graceful shutdown completes pending requests
