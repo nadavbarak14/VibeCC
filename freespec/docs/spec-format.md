@@ -1,120 +1,70 @@
 # FreeSpec Format Reference
 
-## File Structure
+## Structure
 
 ```
 # filename.spec
 
-## Description
-What this component does.
+description:
+Free text describing what this component does.
 
-## API
-Functions this component provides.
+api:
+Free text describing what operations this component provides.
 
-## Tests
-What must pass.
+tests:
+List of test cases that must pass.
 ```
 
 ## Sections
 
-### Description
+### description:
 
-What the component does, its purpose, constraints, and context.
+What the component is and does. Free text. Include constraints, relationships,
+and any context needed to understand it. Use @mentions to reference other specs.
 
-```
-## Description
-Business logic for student enrollment. Enforces prerequisites,
-capacity limits, and prevents duplicates.
+### api:
 
-Coordinates between @entities/student, @entities/course, and @entities/registration.
-```
+What operations this component provides. Free text describing the capabilities.
+For REST endpoints, describe the routes. For services, describe the operations.
+The compiler figures out the actual signatures based on target language.
 
-Include:
-- Purpose and responsibility
-- Properties (for entities)
-- Constraints and business rules
-- Dependencies via @mentions
+### tests:
 
-### API
+What must pass. One test case per line. These are requirements the implementation
+must fulfill.
 
-Functions this component provides. Format: `name(params) -> ReturnType`
+## @mentions
 
-```
-## API
-- enroll(studentId, courseId) -> Registration
-  Enrolls student after validating all rules.
+Reference other specs inline: `@entities/student`, `@services/enrollment`
 
-- checkEligibility(studentId, courseId) -> EligibilityResult
-  Returns eligible (bool) and reasons (list) without making changes.
-```
-
-For REST endpoints, use HTTP method and path:
-
-```
-## API
-- GET /students -> list[Student]
-  List students. Query: status, search, page, limit.
-
-- POST /students -> Student
-  Create student. Body: email, name. Returns 201.
-```
-
-### Tests
-
-What must pass. Free-form list of test cases.
-
-```
-## Tests
-- Enroll succeeds when all rules pass
-- Enroll fails if student not found
-- Enroll fails if prerequisites not met
-- Enroll fails if course full
-```
-
-## @ Mentions
-
-Reference other specs inline using `@path/name`:
-
-- `@entities/student` - References student entity
-- `@services/enrollment` - References enrollment service
-- `@endpoints/courses` - References courses endpoint
-
-Mentions appear naturally in Description or API sections. No separate Mentions section needed.
-
-## Types
-
-Built-in: `string`, `int`, `float`, `bool`, `void`, `list[T]`, `T | null`
-
-Custom types are defined by the component that owns them (e.g., `Student`, `EligibilityResult`).
+Just use them naturally in the text where relevant.
 
 ## Example
 
 ```
 # enrollment.spec
 
-## Description
-Business logic for student enrollment. Enforces prerequisites,
-capacity limits, and prevents duplicates.
+description:
+Business logic for student enrollment. Enforces prerequisites, capacity limits,
+and prevents duplicate registrations.
 
 Coordinates between @entities/student, @entities/course, and @entities/registration.
 
-## API
-- enroll(studentId, courseId) -> Registration
-  Enrolls student after validating all rules.
-  Checks: student active, course open, prerequisites met, capacity available.
+api:
+Enroll a student in a course. Validates that the student is active, the course
+is open for registration, all prerequisites are completed, there's available
+capacity, and the student isn't already enrolled.
 
-- drop(studentId, courseId, reason) -> Registration
-  Student withdrawal. Cannot drop completed courses.
+Drop a student from a course. Records the reason. Cannot drop a completed course.
 
-- checkEligibility(studentId, courseId) -> EligibilityResult
-  Returns eligible (bool) and reasons (list) without making changes.
+Check if a student is eligible to enroll in a course without making any changes.
+Returns whether eligible and a list of reasons if not.
 
-## Tests
-- Enroll succeeds when all rules pass
-- Enroll fails if student not found
-- Enroll fails if course not open
-- Enroll fails if prerequisites not met
-- Enroll fails if course full
-- Drop succeeds for confirmed enrollment
-- Drop fails for completed enrollment
+tests:
+Enroll succeeds when all rules pass
+Enroll fails if student not found
+Enroll fails if prerequisites not met
+Enroll fails if course full
+Drop succeeds for confirmed enrollment
+Drop fails for completed enrollment
 ```

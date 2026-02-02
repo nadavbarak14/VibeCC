@@ -1,36 +1,25 @@
 # student.spec
 
-## Description
+description:
 A student who can enroll in courses.
 
-Properties: id, email (unique), name, status (active/inactive/suspended),
-createdAt, updatedAt.
+Has a unique email, name, and status (active, inactive, or suspended).
+Tracks when created and last updated.
 
-## API
-- create(name, email) -> Student
-  Creates student. Email must be unique.
+api:
+Create a new student with name and email. Email must be unique.
+Get a student by their ID.
+Find a student by their email.
+Update a student's information.
+Delete a student (soft delete - sets inactive). Cannot delete if they have active @entities/registration records.
+List students with filtering and pagination.
 
-- get(id) -> Student | null
-  Returns student or null if not found.
-
-- getByEmail(email) -> Student | null
-  Finds student by email.
-
-- update(id, updates) -> Student
-  Updates student fields.
-
-- delete(id) -> bool
-  Soft-deletes (sets inactive). Fails if has active @entities/registration.
-
-- list(filters, pagination) -> list[Student]
-  Returns filtered, paginated students.
-
-## Tests
-- Create with valid data succeeds
-- Duplicate email rejected
-- Invalid email format rejected
-- Get returns student by ID
-- Get returns null for unknown ID
-- Update changes fields
-- Delete sets status inactive
-- Delete fails with active registrations
+tests:
+Create with valid data succeeds
+Duplicate email rejected
+Invalid email format rejected
+Get returns student by ID
+Get returns nothing for unknown ID
+Update changes fields
+Delete sets status inactive
+Delete fails with active registrations
