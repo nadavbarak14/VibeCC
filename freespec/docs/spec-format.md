@@ -9,7 +9,7 @@ description:
 Free text about what this is.
 
 api:
-Free text about what it does.
+Operations, one per line.
 
 tests:
 Test cases, one per line.

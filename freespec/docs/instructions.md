@@ -20,7 +20,7 @@ description:
 Free text about what this component is and does.
 
 api:
-Free text about what operations this component provides.
+Operations this component provides, one per line.
 
 tests:
 Test cases that must pass, one per line.
@@ -49,12 +49,12 @@ different categories. Let it flow naturally.
 
 ### api:
 
-Free text describing what operations this component provides. For services,
-describe what you can do with it. For REST endpoints, describe the routes
-and what they do. For entities, describe how to create, read, update, delete.
+One operation per line. Each line describes a single thing you can do with
+this component. For services, list each action. For REST endpoints, list
+each route. For entities, list create, read, update, delete operations.
 
 Don't write function signatures or parameter types. The target language isn't
-known yet. Just describe the operations in plain language.
+known yet. Just describe each operation in plain language.
 
 ### tests:
 
@@ -98,18 +98,12 @@ enrolled. Prerequisites are courses the student has completed, not just enrolled
 Dropping a course frees up a capacity slot. Completed courses cannot be dropped.
 
 api:
-Enroll a student in a course. Checks all the rules and creates a confirmed
-registration if they pass. Returns the registration or fails with a reason.
-
-Drop a student from a course with an optional reason.
-
-Complete a registration with a grade.
-
-Check if a student is eligible to enroll without actually enrolling them.
-Returns whether they can enroll and all the reasons why not if they can't.
-
-Get all enrollments for a student.
-Get all students enrolled in a course.
+Enroll a student in a course, checking all rules and returning the registration or failure reason
+Drop a student from a course with an optional reason
+Complete a registration with a grade
+Check if a student is eligible to enroll, returning all failure reasons if not
+Get all enrollments for a student
+Get all students enrolled in a course
 
 tests:
 Enroll succeeds when all rules pass
