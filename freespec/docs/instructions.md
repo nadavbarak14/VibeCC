@@ -20,10 +20,10 @@ description:
 Free text about what this component is and does.
 
 exports:
-Functions this component provides, one per line.
+- What this component provides, one per line
 
 tests:
-Test cases that must pass, one per line.
+- Test cases that must pass, one per line
 ```
 
 **DO NOT invent other labels.** No "Properties:", no "Constraints:", no "Status:",
@@ -49,23 +49,19 @@ different categories. Let it flow naturally.
 
 ### exports:
 
-One function per line. Each line describes a single function this component
-exports. For services, list each action. For entities, list create, read,
-update, delete operations.
+One line per logical export, each starting with `-`. Each line describes
+something this component provides. For services, list each action. For
+entities, list create, read, update, delete operations.
 
-Don't write function signatures or parameter types. The target language isn't
-known yet. Just describe each function in plain language.
+Don't write signatures or types. The target language isn't known yet.
+Just describe each export in plain language.
 
 ### tests:
 
-One test case per line. These are requirements - if any test fails, the
-implementation is wrong.
+One test case per line, each starting with `-`. These are requirements - if
+any test fails, the implementation is wrong.
 
-Cover:
-- The normal case works
-- Each way it can fail
-- Edge cases
-- Security/authorization rules
+Cover the normal case, each way it can fail, edge cases, and security rules.
 
 ## @mentions
 
@@ -80,44 +76,6 @@ Use them naturally where relevant.
 **IN the spec:** Everything needed to implement it. If it matters, write it.
 
 **NOT in the spec:** Implementation details, language-specific types, code structure.
-
-## Example
-
-```
-# enrollment.spec
-
-description:
-Business logic for student enrollment. This service enforces all the rules
-for enrolling students in courses. It coordinates between @entities/student,
-@entities/course, and @entities/registration.
-
-A student can only enroll if they are active, the course is open, they have
-completed all prerequisites, the course has capacity, and they aren't already
-enrolled. Prerequisites are courses the student has completed, not just enrolled in.
-
-Dropping a course frees up a capacity slot. Completed courses cannot be dropped.
-
-exports:
-Enroll a student in a course, checking all rules and returning the registration or failure reason
-Drop a student from a course with an optional reason
-Complete a registration with a grade
-Check if a student is eligible to enroll, returning all failure reasons if not
-Get all enrollments for a student
-Get all students enrolled in a course
-
-tests:
-Enroll succeeds when all rules pass
-Enroll fails when student not found
-Enroll fails when student is inactive
-Enroll fails when course not open
-Enroll fails when already enrolled
-Enroll fails when prerequisites not met
-Enroll fails when course full
-Drop succeeds for confirmed registration
-Drop fails for completed registration
-Complete sets the grade
-Eligibility check returns all failure reasons
-```
 
 ## Checklist Before Finishing
 
