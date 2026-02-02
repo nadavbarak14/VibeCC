@@ -3,10 +3,7 @@ version: "0.1"
 language: python
 
 specs:
-  - examples/course-registration/server.spec
-  - examples/course-registration/entities/*.spec
-  - examples/course-registration/services/*.spec
-  - examples/course-registration/endpoints/*.spec
+  - examples/**/*.spec
 
 output:
   api: generated/api/
@@ -14,7 +11,5 @@ output:
   tests: generated/tests/
 
 settings:
-  # Allow AI to ask clarifying questions during planning
   interactive: true
-  # Generate comprehensive test coverage
   test_coverage: high

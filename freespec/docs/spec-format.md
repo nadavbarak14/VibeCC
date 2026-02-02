@@ -6,65 +6,51 @@
 # filename.spec
 
 description:
-Free text describing what this component does.
+Free text about what this is.
 
 api:
-Free text describing what operations this component provides.
+Free text about what it does.
 
 tests:
-List of test cases that must pass.
+Test cases, one per line.
 ```
 
-## Sections
-
-### description:
-
-What the component is and does. Free text. Include constraints, relationships,
-and any context needed to understand it. Use @mentions to reference other specs.
-
-### api:
-
-What operations this component provides. Free text describing the capabilities.
-For REST endpoints, describe the routes. For services, describe the operations.
-The compiler figures out the actual signatures based on target language.
-
-### tests:
-
-What must pass. One test case per line. These are requirements the implementation
-must fulfill.
+Three sections only. No other labels.
 
 ## @mentions
 
 Reference other specs inline: `@entities/student`, `@services/enrollment`
 
-Just use them naturally in the text where relevant.
-
 ## Example
 
 ```
-# enrollment.spec
+# student.spec
 
 description:
-Business logic for student enrollment. Enforces prerequisites, capacity limits,
-and prevents duplicate registrations.
+A student who can enroll in courses. Has an id, email, name, and status.
+Email must be unique and is case-insensitive. Status is active, inactive,
+or suspended, defaulting to active.
 
-Coordinates between @entities/student, @entities/course, and @entities/registration.
+Inactive or suspended students cannot enroll in new courses but keep
+their existing @entities/registration records. Deleting a student sets
+status to inactive. Cannot delete if they have active registrations.
 
 api:
-Enroll a student in a course. Validates that the student is active, the course
-is open for registration, all prerequisites are completed, there's available
-capacity, and the student isn't already enrolled.
-
-Drop a student from a course. Records the reason. Cannot drop a completed course.
-
-Check if a student is eligible to enroll in a course without making any changes.
-Returns whether eligible and a list of reasons if not.
+Create a student with name and email.
+Get a student by id.
+Find a student by email.
+Update a student.
+Delete a student (soft delete).
+List students with filtering and pagination.
 
 tests:
-Enroll succeeds when all rules pass
-Enroll fails if student not found
-Enroll fails if prerequisites not met
-Enroll fails if course full
-Drop succeeds for confirmed enrollment
-Drop fails for completed enrollment
+Create with valid data succeeds
+Create with duplicate email fails
+Create with invalid email fails
+Get returns student by id
+Get returns nothing for unknown id
+Update email to duplicate fails
+Delete sets status to inactive
+Delete with active registration fails
+List filters by status
 ```
