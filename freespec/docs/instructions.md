@@ -19,8 +19,8 @@ There are exactly THREE sections. No more, no less.
 description:
 Free text about what this component is and does.
 
-api:
-Operations this component provides, one per line.
+exports:
+Functions this component provides, one per line.
 
 tests:
 Test cases that must pass, one per line.
@@ -47,14 +47,14 @@ Include everything someone needs to understand this component:
 Just write it as prose. Don't structure it with labels or bullet points for
 different categories. Let it flow naturally.
 
-### api:
+### exports:
 
-One operation per line. Each line describes a single thing you can do with
-this component. For services, list each action. For REST endpoints, list
-each route. For entities, list create, read, update, delete operations.
+One function per line. Each line describes a single function this component
+exports. For services, list each action. For entities, list create, read,
+update, delete operations.
 
 Don't write function signatures or parameter types. The target language isn't
-known yet. Just describe each operation in plain language.
+known yet. Just describe each function in plain language.
 
 ### tests:
 
@@ -97,7 +97,7 @@ enrolled. Prerequisites are courses the student has completed, not just enrolled
 
 Dropping a course frees up a capacity slot. Completed courses cannot be dropped.
 
-api:
+exports:
 Enroll a student in a course, checking all rules and returning the registration or failure reason
 Drop a student from a course with an optional reason
 Complete a registration with a grade
@@ -121,7 +121,7 @@ Eligibility check returns all failure reasons
 
 ## Checklist Before Finishing
 
-- [ ] Only three sections: description:, api:, tests:
+- [ ] Only three sections: description:, exports:, tests:
 - [ ] No invented labels or sub-sections
 - [ ] Description is natural prose, not structured lists
 - [ ] All behavior and rules are documented
