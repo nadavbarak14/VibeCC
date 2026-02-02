@@ -1,33 +1,43 @@
 # registration.spec
 
 ## Description
-Represents a student's enrollment in a course.
+A student's enrollment in a course.
 
-## Properties
-- id: unique identifier (generated)
-- studentId: reference to @entities/student
-- courseId: reference to @entities/course
-- status: pending | confirmed | dropped | completed
-- grade: optional, set on completion
-- enrolledAt: timestamp
-- completedAt: optional timestamp
-- droppedAt: optional timestamp
+Properties: id, studentId (@entities/student), courseId (@entities/course),
+status (pending/confirmed/dropped/completed), grade (optional),
+enrolledAt, completedAt (optional), droppedAt (optional).
 
-## Constraints
-- Student and course combination must be unique (no duplicate enrollments)
-- Student must exist
-- Course must exist
-- Grade only set when status is "completed"
-- completedAt only set when status is "completed"
-- droppedAt only set when status is "dropped"
+Student + course combination must be unique.
+Grade only set when completed.
+
+## API
+- create(studentId, courseId) -> Registration
+  Creates registration record.
+
+- get(id) -> Registration | null
+  Returns registration or null.
+
+- getByStudentAndCourse(studentId, courseId) -> Registration | null
+  Finds specific enrollment.
+
+- listByStudent(studentId) -> list[Registration]
+  Returns all registrations for a student.
+
+- listByCourse(courseId) -> list[Registration]
+  Returns all registrations for a course.
+
+- updateStatus(id, status) -> Registration
+  Changes registration status.
+
+- setGrade(id, grade) -> Registration
+  Sets grade and marks completed.
 
 ## Tests
-- Valid registration links student and course
-- Duplicate student-course pair rejected
-- Invalid student reference rejected
-- Invalid course reference rejected
-- Grade without completed status rejected
-
-## Mentions
-@entities/student
-@entities/course
+- Create links student and course
+- Duplicate student-course rejected
+- Invalid student rejected
+- Invalid course rejected
+- Get returns registration
+- List by student returns all enrollments
+- List by course returns roster
+- Set grade marks as completed

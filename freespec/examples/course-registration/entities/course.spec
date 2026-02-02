@@ -1,28 +1,50 @@
 # course.spec
 
 ## Description
-Represents a course available for student enrollment.
+A course available for enrollment.
 
-## Properties
-- id: unique identifier (generated)
-- code: course code (e.g., "CS101")
-- title: course title
-- capacity: maximum number of students
-- prerequisites: list of course IDs required before enrollment
-- status: draft | open | closed | archived
-- createdAt: timestamp
-- updatedAt: timestamp
+Properties: id, code (unique), title, capacity, prerequisites (list of course IDs),
+status (draft/open/closed/archived), createdAt, updatedAt.
 
-## Constraints
-- Code must be unique
-- Capacity must be positive integer
-- Prerequisites must reference existing courses
-- Cannot create circular prerequisite chains
-- Status defaults to "draft" on creation
+Prerequisites must be completed before a @entities/student can enroll.
+Cannot have circular prerequisite chains.
+
+## API
+- create(code, title, capacity, prerequisites) -> Course
+  Creates course. Code must be unique.
+
+- get(id) -> Course | null
+  Returns course or null if not found.
+
+- update(id, updates) -> Course
+  Updates course. Cannot reduce capacity below current enrollment.
+
+- delete(id) -> bool
+  Archives course. Fails if has active @entities/registration.
+
+- list(filters, pagination) -> list[Course]
+  Returns filtered, paginated courses.
+
+- getPrerequisites(id) -> list[Course]
+  Returns prerequisite courses.
+
+- checkCapacity(id) -> CapacityInfo
+  Returns enrollment count and remaining slots.
+
+- openRegistration(id) -> Course
+  Sets status to open.
+
+- closeRegistration(id) -> Course
+  Sets status to closed.
 
 ## Tests
-- Valid course has all required fields
+- Create with valid data succeeds
 - Duplicate code rejected
-- Zero or negative capacity rejected
-- Invalid prerequisite reference rejected
+- Invalid prerequisite rejected
 - Circular prerequisites rejected
+- Get returns course by ID
+- Update changes fields
+- Cannot reduce capacity below enrollment
+- Delete archives course
+- Delete fails with active registrations
+- Check capacity returns accurate count
