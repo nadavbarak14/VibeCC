@@ -1,7 +1,7 @@
 # courses.spec
 
 description:
-The courses API provides REST endpoints for managing courses. Reading courses is available to all authenticated users, but modifications require admin privileges.
+The courses API provides REST endpoints for managing @entities/course records. Reading courses is available to all authenticated users via @services/auth, but modifications require admin privileges.
 
 GET /courses lists all courses. Supports optional query parameters for filtering by open status and pagination. Returns 200 with an array of course data including current enrollment count and available seats.
 

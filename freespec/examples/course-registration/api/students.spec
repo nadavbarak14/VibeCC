@@ -1,7 +1,7 @@
 # students.spec
 
 description:
-The students API provides REST endpoints for managing student records. All endpoints require authentication and most require admin privileges.
+The students API provides REST endpoints for managing @entities/student records. All endpoints require authentication via @services/auth and most require admin privileges.
 
 GET /students lists all students. Supports optional query parameters for filtering by active status and pagination. Requires admin privileges. Returns 200 with an array of student data.
 

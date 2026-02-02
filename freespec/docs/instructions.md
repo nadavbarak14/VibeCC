@@ -69,7 +69,9 @@ Reference other specs with `@path/name` inline in your text:
 - `@entities/student`
 - `@services/enrollment`
 
-Use them naturally where relevant.
+**REQUIRED:** If your spec depends on or uses anything from another spec, you MUST
+@mention that spec at least once in your description. This makes dependencies explicit
+and traceable. Missing @mentions means missing context for implementation.
 
 ## What Goes In vs Out
 
@@ -84,5 +86,6 @@ Use them naturally where relevant.
 - [ ] Description is natural prose, not structured lists
 - [ ] All behavior and rules are documented
 - [ ] All failure modes have corresponding tests
+- [ ] Every dependency on another spec has an @mention
 - [ ] @mentions point to real specs
 - [ ] Someone could implement this without asking questions
