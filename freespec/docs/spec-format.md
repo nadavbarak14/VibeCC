@@ -8,8 +8,8 @@
 description:
 Free text about what this is.
 
-api:
-Operations, one per line.
+exports:
+Functions, one per line.
 
 tests:
 Test cases, one per line.
@@ -35,7 +35,7 @@ Inactive or suspended students cannot enroll in new courses but keep
 their existing @entities/registration records. Deleting a student sets
 status to inactive. Cannot delete if they have active registrations.
 
-api:
+exports:
 Create a student with name and email.
 Get a student by id.
 Find a student by email.
