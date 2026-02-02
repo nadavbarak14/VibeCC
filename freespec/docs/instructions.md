@@ -6,142 +6,131 @@ This guide is for the coding agent creating `.spec` files.
 
 **Each spec file is code.** Treat it like you're writing a source file, not documentation.
 
-A spec file must be self-contained and complete. Anyone (human or AI) reading it should
+A spec file must be self-contained and complete. Anyone reading it should
 understand exactly what this component is, what it does, and how to verify it works.
 
-## What Goes in a Spec File
+## Format
 
-Everything relevant to that component:
+There are exactly THREE sections. No more, no less.
 
-- What it is
-- What it does
-- What it depends on
-- What constraints apply
-- What can go wrong
-- How to test it
+```
+# filename.spec
 
-If something matters for implementation, it belongs in the spec.
+description:
+Free text about what this component is and does.
 
-## Writing Each Section
+api:
+Free text about what operations this component provides.
+
+tests:
+Test cases that must pass, one per line.
+```
+
+**DO NOT invent other labels.** No "Properties:", no "Constraints:", no "Status:",
+no "Authorization:", no sub-sections. Everything goes into one of the three sections
+as natural free-flowing text.
+
+## The Three Sections
 
 ### description:
 
-This is not a summary. It's the complete definition of what this component is.
+Free text explaining what this component is. Write in natural paragraphs.
+Include everything someone needs to understand this component:
 
-Include:
-- What the component represents or does
-- Its properties/data (for entities)
-- Constraints and validation rules
-- Relationships to other components (@mentions)
-- Edge cases and error conditions
-- Security or performance considerations if relevant
+- What it represents or does
+- Its data and how it behaves
+- Rules and constraints in plain language
+- Relationships to other components using @mentions
+- What can go wrong
+- Security or authorization considerations
 
-Bad:
-```
-description:
-A student entity.
-```
-
-Good:
-```
-description:
-A student who can enroll in courses.
-
-Has a unique email, name, and status (active, inactive, or suspended).
-Tracks when created and last updated.
-
-Email must be valid format and unique across all students.
-Status defaults to active on creation.
-```
+Just write it as prose. Don't structure it with labels or bullet points for
+different categories. Let it flow naturally.
 
 ### api:
 
-Describe every operation this component provides. Be specific about:
-- What the operation does
-- What inputs it needs (conceptually, not typed parameters)
-- What it returns or produces
-- What can cause it to fail
+Free text describing what operations this component provides. For services,
+describe what you can do with it. For REST endpoints, describe the routes
+and what they do. For entities, describe how to create, read, update, delete.
 
-For REST endpoints, include the HTTP method and path.
-For services, describe each distinct operation.
-For entities, describe CRUD and any special operations.
-
-Bad:
-```
-api:
-CRUD operations for students.
-```
-
-Good:
-```
-api:
-Create a new student with name and email. Email must be unique.
-Get a student by their ID.
-Find a student by their email.
-Update a student's information.
-Delete a student (soft delete - sets inactive). Cannot delete if they have
-active registrations.
-List students with filtering and pagination.
-```
+Don't write function signatures or parameter types. The target language isn't
+known yet. Just describe the operations in plain language.
 
 ### tests:
 
-These are requirements, not suggestions. Every test listed must pass for the
-implementation to be correct.
+One test case per line. These are requirements - if any test fails, the
+implementation is wrong.
 
-Write tests that:
-- Cover the happy path
-- Cover each failure mode mentioned in description/api
-- Cover edge cases
-- Cover security constraints (who can do what)
+Cover:
+- The normal case works
+- Each way it can fail
+- Edge cases
+- Security/authorization rules
 
-One test per line. Be specific enough that the test is unambiguous.
+## @mentions
 
-Bad:
-```
-tests:
-Create works
-Delete works
-```
-
-Good:
-```
-tests:
-Create with valid data succeeds
-Duplicate email rejected
-Invalid email format rejected
-Delete sets status inactive
-Delete fails with active registrations
-```
-
-## Using @mentions
-
-Reference other specs with `@path/name`:
+Reference other specs with `@path/name` inline in your text:
 - `@entities/student`
 - `@services/enrollment`
-- `@endpoints/courses`
 
-Use them naturally in the text. They indicate dependencies - the compiler uses
-these to determine build order and verify all references exist.
+Use them naturally where relevant.
 
-## File Organization
+## What Goes In vs Out
 
-Mirror logical architecture:
-- `entities/` - data structures, what things are
-- `services/` - business logic, what operations exist
-- `endpoints/` - HTTP interface, how to access operations
-- `server.spec` - infrastructure, how it all connects
+**IN the spec:** Everything needed to implement it. If it matters, write it.
 
-Each directory groups related specs. Each spec is one component.
+**NOT in the spec:** Implementation details, language-specific types, code structure.
 
-## Completeness Checklist
+## Example
 
-Before finishing a spec file, verify:
+```
+# enrollment.spec
 
-- [ ] Description explains what it IS, not just what it does
-- [ ] All properties/data are listed (for entities)
-- [ ] All constraints are documented
-- [ ] All operations are described in api section
+description:
+Business logic for student enrollment. This service enforces all the rules
+for enrolling students in courses. It coordinates between @entities/student,
+@entities/course, and @entities/registration.
+
+A student can only enroll if they are active, the course is open, they have
+completed all prerequisites, the course has capacity, and they aren't already
+enrolled. Prerequisites are courses the student has completed, not just enrolled in.
+
+Dropping a course frees up a capacity slot. Completed courses cannot be dropped.
+
+api:
+Enroll a student in a course. Checks all the rules and creates a confirmed
+registration if they pass. Returns the registration or fails with a reason.
+
+Drop a student from a course with an optional reason.
+
+Complete a registration with a grade.
+
+Check if a student is eligible to enroll without actually enrolling them.
+Returns whether they can enroll and all the reasons why not if they can't.
+
+Get all enrollments for a student.
+Get all students enrolled in a course.
+
+tests:
+Enroll succeeds when all rules pass
+Enroll fails when student not found
+Enroll fails when student is inactive
+Enroll fails when course not open
+Enroll fails when already enrolled
+Enroll fails when prerequisites not met
+Enroll fails when course full
+Drop succeeds for confirmed registration
+Drop fails for completed registration
+Complete sets the grade
+Eligibility check returns all failure reasons
+```
+
+## Checklist Before Finishing
+
+- [ ] Only three sections: description:, api:, tests:
+- [ ] No invented labels or sub-sections
+- [ ] Description is natural prose, not structured lists
+- [ ] All behavior and rules are documented
 - [ ] All failure modes have corresponding tests
-- [ ] All @mentions point to real specs
+- [ ] @mentions point to real specs
 - [ ] Someone could implement this without asking questions
