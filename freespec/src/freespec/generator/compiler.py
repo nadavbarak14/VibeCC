@@ -109,6 +109,26 @@ class IndependentCompiler:
         """Filter headers to only those @mentioned by the spec."""
         return {m: all_headers[m] for m in spec.mentions if m in all_headers}
 
+    def _get_header_paths_for_spec(
+        self,
+        spec: SpecFile,
+        config: FreeSpecConfig,
+    ) -> dict[str, Path]:
+        """Get header file paths for @mentioned dependencies."""
+        header_paths: dict[str, Path] = {}
+        headers_dir = config.get_output_path("headers")
+
+        for mention in spec.mentions:
+            # Parse mention like "entities/student" -> entities/student.py
+            parts = mention.split("/")
+            if len(parts) == 2:
+                category, name = parts
+                header_path = headers_dir / category / f"{name}.py"
+                if header_path.exists():
+                    header_paths[mention] = header_path
+
+        return header_paths
+
     def _extract_code_from_output(self, output: str) -> str | None:
         """Try to extract code from LLM output if file wasn't written."""
         import re
@@ -146,13 +166,13 @@ class IndependentCompiler:
         impl_path.parent.mkdir(parents=True, exist_ok=True)
         test_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Filter to only @mentioned headers
-        mentioned_headers = self._filter_headers_for_spec(spec, context.all_headers)
+        # Get header file paths for @mentioned dependencies
+        header_paths = self._get_header_paths_for_spec(spec, context.config)
 
         logger.info(
             "Compiling %s (depends on: %s)",
             spec.spec_id,
-            list(mentioned_headers.keys()) or "none",
+            list(header_paths.keys()) or "none",
         )
 
         previous_error: str | None = None
@@ -167,7 +187,7 @@ class IndependentCompiler:
                 language=context.config.language,
                 impl_path=impl_path,
                 test_path=test_path,
-                mentioned_headers=mentioned_headers,
+                header_paths=header_paths,
                 previous_error=previous_error,
             )
 

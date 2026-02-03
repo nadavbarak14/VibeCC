@@ -349,7 +349,7 @@ class PromptBuilder:
         language: str,
         impl_path: Path,
         test_path: Path,
-        mentioned_headers: dict[str, str],
+        header_paths: dict[str, Path] | None = None,
         previous_error: str | None = None,
     ) -> str:
         """Build a prompt for independent compilation (impl + tests together).
@@ -363,14 +363,13 @@ class PromptBuilder:
             language: Target programming language.
             impl_path: Where the implementation will be written.
             test_path: Where the test file will be written.
-            mentioned_headers: Map of @mentioned spec_id to their header content.
+            header_paths: Map of @mentioned spec_id to their header file paths.
             previous_error: Previous pytest output if retrying after failure.
 
         Returns:
             Complete prompt for the LLM.
         """
         docs = self.load_docs()
-        headers_context = self._format_headers_context(mentioned_headers)
 
         prompt_parts = [
             "You are performing INDEPENDENT COMPILATION of a FreeSpec specification.",
@@ -385,17 +384,29 @@ class PromptBuilder:
             f"Generate BOTH the {language.upper()} implementation AND complete, passing tests.",
             "The tests must actually run and pass - no skipped tests or placeholders.",
             "",
-            "## Available Interfaces (ONLY these dependencies)",
+            "## Dependencies (Header Files)",
             "",
         ]
 
-        if headers_context:
+        if header_paths:
             prompt_parts.extend(
                 [
-                    "These are the ONLY interfaces available to import.",
-                    "Mock all dependencies using these interfaces in your tests.",
+                    "This module depends on the following interfaces.",
+                    "READ these header files to understand the API signatures:",
                     "",
-                    headers_context,
+                ]
+            )
+            for spec_id, path in sorted(header_paths.items()):
+                prompt_parts.append(f"- **{spec_id}**: `{path}`")
+            prompt_parts.extend(
+                [
+                    "",
+                    "IMPORTANT: Read each header file above to understand:",
+                    "- Class names and their constructors",
+                    "- Method signatures and return types",
+                    "- How to properly instantiate and use these classes",
+                    "",
+                    "In your tests, mock these dependencies using unittest.mock.",
                     "",
                 ]
             )
@@ -436,14 +447,14 @@ class PromptBuilder:
                 "",
                 "## Output Files",
                 "",
-                f"1. Implementation: {impl_path}",
-                f"2. Tests: {test_path}",
+                f"1. Implementation: `{impl_path}`",
+                f"2. Tests: `{test_path}`",
                 "",
                 "## Requirements",
                 "",
                 "### Implementation",
                 "- Implement the full functionality described in the spec",
-                "- Import only from the interfaces listed above (if any)",
+                "- Import dependencies from the header files listed above (if any)",
                 "- Use proper type hints",
                 "",
                 "### Tests",
@@ -451,15 +462,15 @@ class PromptBuilder:
                 "- Mock ALL external dependencies using unittest.mock",
                 "- Tests must PASS - no @pytest.mark.skip or pending markers",
                 "- Test the behavior described in the spec's tests section",
-                "- Import the implementation from its module path",
                 "",
                 "## Instructions",
                 "",
-                "1. Read the spec carefully",
-                "2. Write the implementation file first",
-                "3. Write the test file that tests the implementation",
-                "4. Ensure tests would pass when run with pytest",
-                "5. Write BOTH files to the specified paths",
+                "1. If there are dependencies, READ the header files first to understand the APIs",
+                "2. Read the spec carefully",
+                "3. Write the implementation file",
+                "4. Write the test file that tests the implementation",
+                "5. Ensure tests would pass when run with pytest",
+                "6. Write BOTH files to the specified paths",
             ]
         )
 

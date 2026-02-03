@@ -347,14 +347,20 @@ class TestIndependentCompiler:
         assert result.attempts == 1
         assert "LLM generation failed" in result.error
 
-    def test_compile_file_passes_mentioned_headers(self, tmp_path: Path) -> None:
-        """Should pass only @mentioned headers to prompt builder."""
+    def test_compile_file_passes_header_paths(self, tmp_path: Path) -> None:
+        """Should pass header file paths for @mentioned dependencies."""
         config = make_config(tmp_path)
         spec = make_spec("enrollment", "services", mentions=["entities/student"])
         all_headers = {
             "entities/student": "class Student: pass",
             "entities/course": "class Course: pass",
         }
+
+        # Create the header file on disk
+        headers_dir = config.get_output_path("headers")
+        student_header = headers_dir / "entities" / "student.py"
+        student_header.parent.mkdir(parents=True, exist_ok=True)
+        student_header.write_text("class Student: pass")
 
         mock_client = MagicMock()
         mock_client.generate.return_value = GenerationResult(
@@ -383,9 +389,11 @@ class TestIndependentCompiler:
 
         compiler.compile_file(spec, context)
 
-        # Verify only mentioned headers were passed
+        # Verify header paths were passed (not content)
         call_kwargs = mock_builder.build_compile_prompt.call_args.kwargs
-        assert call_kwargs["mentioned_headers"] == {"entities/student": "class Student: pass"}
+        assert "header_paths" in call_kwargs
+        assert "entities/student" in call_kwargs["header_paths"]
+        assert call_kwargs["header_paths"]["entities/student"] == student_header
 
     def test_compile_file_passes_error_on_retry(self, tmp_path: Path) -> None:
         """Should pass previous error to prompt builder on retry."""

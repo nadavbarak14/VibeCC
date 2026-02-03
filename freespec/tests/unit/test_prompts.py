@@ -166,7 +166,7 @@ class TestPromptBuilder:
             language="python",
             impl_path=impl_path,
             test_path=test_path,
-            mentioned_headers={},
+            header_paths={},
         )
 
         # Should mention independent compilation
@@ -182,12 +182,12 @@ class TestPromptBuilder:
         assert spec.name in prompt
 
     def test_build_compile_prompt_with_headers(self, builder: PromptBuilder) -> None:
-        """Should include mentioned headers in compile prompt."""
+        """Should include header file paths in compile prompt."""
         spec = make_spec("enrollment", "services", mentions=["entities/student"])
         impl_path = Path("/output/src/services/enrollment.py")
         test_path = Path("/output/tests/services/test_enrollment.py")
-        mentioned_headers = {
-            "entities/student": "class Student:\n    pass",
+        header_paths = {
+            "entities/student": Path("/output/headers/entities/student.py"),
         }
 
         prompt = builder.build_compile_prompt(
@@ -195,14 +195,14 @@ class TestPromptBuilder:
             language="python",
             impl_path=impl_path,
             test_path=test_path,
-            mentioned_headers=mentioned_headers,
+            header_paths=header_paths,
         )
 
-        # Should include the mentioned header
+        # Should include the header path
         assert "entities/student" in prompt
-        assert "class Student:" in prompt
-        # Should emphasize these are the ONLY interfaces
-        assert "ONLY" in prompt
+        assert "/output/headers/entities/student.py" in prompt
+        # Should instruct to READ the header files
+        assert "READ" in prompt
 
     def test_build_compile_prompt_no_dependencies(self, builder: PromptBuilder) -> None:
         """Should note when there are no dependencies."""
@@ -215,7 +215,7 @@ class TestPromptBuilder:
             language="python",
             impl_path=impl_path,
             test_path=test_path,
-            mentioned_headers={},
+            header_paths={},
         )
 
         # Should mention no external dependencies
@@ -233,7 +233,7 @@ class TestPromptBuilder:
             language="python",
             impl_path=impl_path,
             test_path=test_path,
-            mentioned_headers={},
+            header_paths={},
             previous_error=previous_error,
         )
 
@@ -254,7 +254,7 @@ class TestPromptBuilder:
             language="python",
             impl_path=impl_path,
             test_path=test_path,
-            mentioned_headers={},
+            header_paths={},
             previous_error=None,
         )
 
@@ -265,14 +265,14 @@ class TestPromptBuilder:
         spec = make_spec("enrollment", "services", mentions=["entities/student"])
         impl_path = Path("/output/src/services/enrollment.py")
         test_path = Path("/output/tests/services/test_enrollment.py")
-        mentioned_headers = {"entities/student": "class Student: pass"}
+        header_paths = {"entities/student": Path("/output/headers/entities/student.py")}
 
         prompt = builder.build_compile_prompt(
             spec=spec,
             language="python",
             impl_path=impl_path,
             test_path=test_path,
-            mentioned_headers=mentioned_headers,
+            header_paths=header_paths,
         )
 
         # Should mention mocking
