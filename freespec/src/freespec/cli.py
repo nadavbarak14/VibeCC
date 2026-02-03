@@ -15,6 +15,7 @@ from pathlib import Path
 import click
 
 from freespec.config import ConfigError, FreeSpecConfig, find_config, load_config
+from freespec.generator.compiler import CompileError, IndependentCompiler
 from freespec.generator.headers import HeaderGenerationError, HeaderGenerator, load_headers
 from freespec.generator.impl import ImplementationError, ImplementationGenerator
 from freespec.generator.stubs import GenerationError
@@ -364,14 +365,15 @@ def _load_implementations(config: FreeSpecConfig) -> dict[str, str]:
     help="Path to freespec.yaml (auto-detected if not specified)",
 )
 @click.option(
-    "--no-tests",
-    is_flag=True,
-    help="Skip test skeleton generation",
+    "--max-retries",
+    default=3,
+    type=int,
+    help="Maximum retry attempts per module (default: 3)",
 )
 @click.option(
-    "--no-verify",
+    "--fail-fast",
     is_flag=True,
-    help="Skip import verification",
+    help="Stop on first module failure",
 )
 @click.option(
     "-v",
@@ -386,19 +388,21 @@ def _load_implementations(config: FreeSpecConfig) -> dict[str, str]:
 )
 def compile(
     config_path: Path | None,
-    no_tests: bool,
-    no_verify: bool,
+    max_retries: int,
+    fail_fast: bool,
     verbose: bool,
     dry_run: bool,
 ) -> None:
-    """Compile .spec files into code stubs using two-pass architecture.
+    """Compile .spec files using independent compilation (gcc model).
 
-    Pass 1: Generate headers (interfaces) for all specs independently.
-    Pass 2: Generate implementations using all headers as context.
-    Pass 3: Generate test skeletons (optional).
+    Each file compiles independently:
+    - Pass 1: Generate all headers (interfaces)
+    - Pass 2: For each file:
+        - Generate impl + tests together (impl sees only @mentioned headers)
+        - Run tests with pytest
+        - Retry with error feedback on failure
 
-    This approach supports circular @mentions since all interfaces are
-    available before generating implementations.
+    Files "compile" successfully only when their tests pass.
     """
     setup_logging(verbose)
 
@@ -426,7 +430,7 @@ def compile(
 
         click.echo(f"  Total: {len(specs)} spec files")
 
-        # Validate dependencies (allow cycles in two-pass mode)
+        # Validate dependencies (allow cycles)
         click.echo("\nValidating dependencies...")
         resolver = DependencyResolver()
         _, missing_deps = resolver.get_all_specs(specs, validate=True)
@@ -439,7 +443,7 @@ def compile(
         # Check for cycles (informational only)
         cycles = resolver.find_cycles(specs)
         if cycles:
-            click.echo(f"  Note: {len(cycles)} circular @mention(s) (supported in two-pass)")
+            click.echo(f"  Note: {len(cycles)} circular @mention(s) (allowed)")
 
         if dry_run:
             click.echo("\n[Dry run] Skipping code generation")
@@ -459,46 +463,46 @@ def compile(
         header_context = header_generator.generate_all_headers(specs, config)
         click.echo(f"  Generated {len(header_context.generated_files)} header files")
 
-        # Stage 3: Generate implementations (Pass 2)
-        click.echo("\nStage 3: Generating implementations (Pass 2)...")
-        impl_generator = ImplementationGenerator(client=client)
-        impl_context = impl_generator.generate_all_impls(specs, config, header_context.headers)
-        click.echo(f"  Generated {len(impl_context.generated_files)} implementation files")
+        # Stage 3: Independent compilation (Pass 2)
+        click.echo(f"\nStage 3: Independent compilation (max retries: {max_retries})...")
+        compiler = IndependentCompiler(client=client, max_retries=max_retries)
+        compile_context = compiler.compile_all(
+            specs=specs,
+            config=config,
+            all_headers=header_context.headers,
+            fail_fast=fail_fast,
+        )
 
-        # Stage 4: Generate tests (optional)
-        test_count = 0
-        if not no_tests:
-            click.echo("\nStage 4: Generating test skeletons...")
-            test_generator = SkeletonTestGenerator(client=client)
-            test_context = test_generator.generate_all_tests(
-                specs, config, impl_context.generated_code
-            )
-            test_count = len(test_context.generated_files)
-            click.echo(f"  Generated {test_count} test files")
+        # Report results
+        click.echo("\nCompilation Results:")
+        for result in compile_context.results:
+            status = "[PASS]" if result.success else "[FAIL]"
+            retry_info = f" ({result.attempts} attempt{'s' if result.attempts > 1 else ''})"
+            click.echo(f"  {status} {result.spec_id}{retry_info}")
 
-        # Stage 5: Verify imports
-        if not no_verify:
-            click.echo("\nStage 5: Verifying imports...")
-            verifier = ImportVerifier()
+        # Summary
+        passed = len(compile_context.passed)
+        failed = len(compile_context.failed)
+        total = passed + failed
+        click.echo(f"\nSummary: {passed}/{total} modules compiled successfully")
 
-            impl_paths = [f.path for f in impl_context.generated_files]
-            result = verifier.verify_cross_imports(impl_paths, config.get_output_path("impl"))
-
-            if result.success:
-                click.echo("  All imports verified successfully")
-            else:
-                click.echo("  Import verification failed:", err=True)
-                for error in result.errors:
-                    line_info = f":{error.line}" if error.line else ""
-                    click.echo(f"    - {error.file_path}{line_info}: {error.error}", err=True)
-                sys.exit(1)
+        if compile_context.failed:
+            click.echo("\nFailed modules:", err=True)
+            for result in compile_context.failed:
+                click.echo(f"  - {result.spec_id}", err=True)
+                if result.error and verbose:
+                    # Truncate long errors
+                    error_preview = result.error[:500]
+                    if len(result.error) > 500:
+                        error_preview += "..."
+                    click.echo(f"    Error: {error_preview}", err=True)
+            sys.exit(1)
 
         click.echo("\nCompilation complete!")
         click.echo("Output written to:")
         click.echo(f"  Headers: {config.get_output_path('headers')}")
         click.echo(f"  Implementations: {config.get_output_path('impl')}")
-        if not no_tests:
-            click.echo(f"  Tests: {config.get_output_path('tests')}")
+        click.echo(f"  Tests: {config.get_output_path('tests')}")
 
     except ConfigError as e:
         click.echo(f"Configuration error: {e}", err=True)
@@ -509,11 +513,8 @@ def compile(
     except HeaderGenerationError as e:
         click.echo(f"Header generation error: {e}", err=True)
         sys.exit(1)
-    except ImplementationError as e:
-        click.echo(f"Implementation error: {e}", err=True)
-        sys.exit(1)
-    except SkeletonGenError as e:
-        click.echo(f"Test generation error: {e}", err=True)
+    except CompileError as e:
+        click.echo(f"Compilation error: {e}", err=True)
         sys.exit(1)
     except GenerationError as e:
         click.echo(f"Generation error: {e}", err=True)

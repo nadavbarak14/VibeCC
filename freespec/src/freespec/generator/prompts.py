@@ -343,6 +343,128 @@ class PromptBuilder:
 
         return "\n".join(prompt_parts)
 
+    def build_compile_prompt(
+        self,
+        spec: SpecFile,
+        language: str,
+        impl_path: Path,
+        test_path: Path,
+        mentioned_headers: dict[str, str],
+        previous_error: str | None = None,
+    ) -> str:
+        """Build a prompt for independent compilation (impl + tests together).
+
+        This generates both implementation and tests in a single LLM call.
+        Tests mock all dependencies using the provided headers. If retrying,
+        includes the previous pytest output for error feedback.
+
+        Args:
+            spec: The spec file to compile.
+            language: Target programming language.
+            impl_path: Where the implementation will be written.
+            test_path: Where the test file will be written.
+            mentioned_headers: Map of @mentioned spec_id to their header content.
+            previous_error: Previous pytest output if retrying after failure.
+
+        Returns:
+            Complete prompt for the LLM.
+        """
+        docs = self.load_docs()
+        headers_context = self._format_headers_context(mentioned_headers)
+
+        prompt_parts = [
+            "You are performing INDEPENDENT COMPILATION of a FreeSpec specification.",
+            "This is like gcc compiling a single .c file - you only see this file's interfaces.",
+            "",
+            "## FreeSpec Documentation",
+            "",
+            docs,
+            "",
+            "## Task",
+            "",
+            f"Generate BOTH the {language.upper()} implementation AND complete, passing tests.",
+            "The tests must actually run and pass - no skipped tests or placeholders.",
+            "",
+            "## Available Interfaces (ONLY these dependencies)",
+            "",
+        ]
+
+        if headers_context:
+            prompt_parts.extend(
+                [
+                    "These are the ONLY interfaces available to import.",
+                    "Mock all dependencies using these interfaces in your tests.",
+                    "",
+                    headers_context,
+                    "",
+                ]
+            )
+        else:
+            prompt_parts.extend(
+                [
+                    "This module has no external dependencies (@mentions).",
+                    "",
+                ]
+            )
+
+        if previous_error:
+            prompt_parts.extend(
+                [
+                    "## PREVIOUS ATTEMPT FAILED",
+                    "",
+                    "The previous implementation/tests had errors. Fix them:",
+                    "",
+                    "```",
+                    previous_error,
+                    "```",
+                    "",
+                    "Analyze the errors above and generate corrected code.",
+                    "",
+                ]
+            )
+
+        prompt_parts.extend(
+            [
+                "## Spec File",
+                "",
+                f"Category: {spec.category}",
+                f"Name: {spec.name}",
+                "",
+                "```spec",
+                spec.full_content,
+                "```",
+                "",
+                "## Output Files",
+                "",
+                f"1. Implementation: {impl_path}",
+                f"2. Tests: {test_path}",
+                "",
+                "## Requirements",
+                "",
+                "### Implementation",
+                "- Implement the full functionality described in the spec",
+                "- Import only from the interfaces listed above (if any)",
+                "- Use proper type hints",
+                "",
+                "### Tests",
+                "- Write COMPLETE tests that actually verify the implementation",
+                "- Mock ALL external dependencies using unittest.mock",
+                "- Tests must PASS - no @pytest.mark.skip or pending markers",
+                "- Test the behavior described in the spec's tests section",
+                "- Import the implementation from its module path",
+                "",
+                "## Instructions",
+                "",
+                "1. Read the spec carefully",
+                "2. Write the implementation file first",
+                "3. Write the test file that tests the implementation",
+                "4. Ensure tests would pass when run with pytest",
+                "5. Write BOTH files to the specified paths",
+            ]
+        )
+
+        return "\n".join(prompt_parts)
+
     def _format_dependency_code(self, dependency_code: dict[str, str] | None) -> str:
         """Format dependency code for inclusion in prompt.
 

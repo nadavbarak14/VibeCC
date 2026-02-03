@@ -154,3 +154,126 @@ class TestPromptBuilder:
         """Should return empty string for empty/None headers."""
         assert builder._format_headers_context(None) == ""
         assert builder._format_headers_context({}) == ""
+
+    def test_build_compile_prompt_basic(self, builder: PromptBuilder) -> None:
+        """Should build a compile prompt with impl and test paths."""
+        spec = make_spec("student", "entities")
+        impl_path = Path("/output/src/entities/student.py")
+        test_path = Path("/output/tests/entities/test_student.py")
+
+        prompt = builder.build_compile_prompt(
+            spec=spec,
+            language="python",
+            impl_path=impl_path,
+            test_path=test_path,
+            mentioned_headers={},
+        )
+
+        # Should mention independent compilation
+        assert "INDEPENDENT COMPILATION" in prompt
+        assert "gcc" in prompt.lower()
+        # Should include both file paths
+        assert str(impl_path) in prompt
+        assert str(test_path) in prompt
+        # Should require passing tests (not skipped)
+        assert "PASS" in prompt
+        assert "skip" in prompt.lower()
+        # Should include spec content
+        assert spec.name in prompt
+
+    def test_build_compile_prompt_with_headers(self, builder: PromptBuilder) -> None:
+        """Should include mentioned headers in compile prompt."""
+        spec = make_spec("enrollment", "services", mentions=["entities/student"])
+        impl_path = Path("/output/src/services/enrollment.py")
+        test_path = Path("/output/tests/services/test_enrollment.py")
+        mentioned_headers = {
+            "entities/student": "class Student:\n    pass",
+        }
+
+        prompt = builder.build_compile_prompt(
+            spec=spec,
+            language="python",
+            impl_path=impl_path,
+            test_path=test_path,
+            mentioned_headers=mentioned_headers,
+        )
+
+        # Should include the mentioned header
+        assert "entities/student" in prompt
+        assert "class Student:" in prompt
+        # Should emphasize these are the ONLY interfaces
+        assert "ONLY" in prompt
+
+    def test_build_compile_prompt_no_dependencies(self, builder: PromptBuilder) -> None:
+        """Should note when there are no dependencies."""
+        spec = make_spec("student", "entities")
+        impl_path = Path("/output/src/entities/student.py")
+        test_path = Path("/output/tests/entities/test_student.py")
+
+        prompt = builder.build_compile_prompt(
+            spec=spec,
+            language="python",
+            impl_path=impl_path,
+            test_path=test_path,
+            mentioned_headers={},
+        )
+
+        # Should mention no external dependencies
+        assert "no external dependencies" in prompt.lower()
+
+    def test_build_compile_prompt_with_previous_error(self, builder: PromptBuilder) -> None:
+        """Should include previous error for retry attempts."""
+        spec = make_spec("student", "entities")
+        impl_path = Path("/output/src/entities/student.py")
+        test_path = Path("/output/tests/entities/test_student.py")
+        previous_error = "AssertionError: expected 5, got 3"
+
+        prompt = builder.build_compile_prompt(
+            spec=spec,
+            language="python",
+            impl_path=impl_path,
+            test_path=test_path,
+            mentioned_headers={},
+            previous_error=previous_error,
+        )
+
+        # Should include the error
+        assert "PREVIOUS ATTEMPT FAILED" in prompt
+        assert previous_error in prompt
+        # Should ask for correction
+        assert "fix" in prompt.lower() or "correct" in prompt.lower()
+
+    def test_build_compile_prompt_without_previous_error(self, builder: PromptBuilder) -> None:
+        """Should not include error section on first attempt."""
+        spec = make_spec("student", "entities")
+        impl_path = Path("/output/src/entities/student.py")
+        test_path = Path("/output/tests/entities/test_student.py")
+
+        prompt = builder.build_compile_prompt(
+            spec=spec,
+            language="python",
+            impl_path=impl_path,
+            test_path=test_path,
+            mentioned_headers={},
+            previous_error=None,
+        )
+
+        assert "PREVIOUS ATTEMPT FAILED" not in prompt
+
+    def test_build_compile_prompt_requires_mocking(self, builder: PromptBuilder) -> None:
+        """Should instruct to mock dependencies."""
+        spec = make_spec("enrollment", "services", mentions=["entities/student"])
+        impl_path = Path("/output/src/services/enrollment.py")
+        test_path = Path("/output/tests/services/test_enrollment.py")
+        mentioned_headers = {"entities/student": "class Student: pass"}
+
+        prompt = builder.build_compile_prompt(
+            spec=spec,
+            language="python",
+            impl_path=impl_path,
+            test_path=test_path,
+            mentioned_headers=mentioned_headers,
+        )
+
+        # Should mention mocking
+        assert "mock" in prompt.lower()

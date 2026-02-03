@@ -149,6 +149,25 @@ class ImplementationGenerator:
 
         return context
 
+    def _filter_headers_for_spec(
+        self,
+        spec: SpecFile,
+        all_headers: dict[str, str],
+    ) -> dict[str, str]:
+        """Filter headers to only those @mentioned by the spec.
+
+        For independent compilation, each file only sees the interfaces
+        it explicitly depends on via @mentions.
+
+        Args:
+            spec: The spec file being compiled.
+            all_headers: Map of all spec_id to their header content.
+
+        Returns:
+            Map containing only the headers for @mentioned specs.
+        """
+        return {m: all_headers[m] for m in spec.mentions if m in all_headers}
+
     def _get_impl_path(self, spec: SpecFile, config: FreeSpecConfig) -> Path:
         """Determine output path for a spec's implementation file.
 
