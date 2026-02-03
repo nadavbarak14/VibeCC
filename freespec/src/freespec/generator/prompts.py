@@ -160,34 +160,38 @@ class PromptBuilder:
         ]
 
         if headers_context:
-            prompt_parts.extend([
-                "## Available Interfaces (Headers)",
-                "",
-                "The following interfaces have been generated and can be imported.",
-                "Use these for type hints and understand what dependencies are available.",
-                "",
-                headers_context,
-                "",
-            ])
+            prompt_parts.extend(
+                [
+                    "## Available Interfaces (Headers)",
+                    "",
+                    "The following interfaces have been generated and can be imported.",
+                    "Use these for type hints and understand what dependencies are available.",
+                    "",
+                    headers_context,
+                    "",
+                ]
+            )
 
-        prompt_parts.extend([
-            "## Spec File",
-            "",
-            f"Category: {spec.category}",
-            f"Name: {spec.name}",
-            "",
-            "```spec",
-            spec.full_content,
-            "```",
-            "",
-            "## Instructions",
-            "",
-            "1. Read the spec carefully and understand all exports and tests.",
-            "2. Generate clean, idiomatic code for the target language.",
-            "3. Include proper imports for any dependencies mentioned with @mentions.",
-            "4. Write stub code - interfaces and signatures with NotImplementedError().",
-            "5. Write the file to the specified output path.",
-        ])
+        prompt_parts.extend(
+            [
+                "## Spec File",
+                "",
+                f"Category: {spec.category}",
+                f"Name: {spec.name}",
+                "",
+                "```spec",
+                spec.full_content,
+                "```",
+                "",
+                "## Instructions",
+                "",
+                "1. Read the spec carefully and understand all exports and tests.",
+                "2. Generate clean, idiomatic code for the target language.",
+                "3. Include proper imports for any dependencies mentioned with @mentions.",
+                "4. Write stub code - interfaces and signatures with NotImplementedError().",
+                "5. Write the file to the specified output path.",
+            ]
+        )
 
         return "\n".join(prompt_parts)
 
@@ -239,34 +243,38 @@ class PromptBuilder:
         ]
 
         if dependency_context:
-            prompt_parts.extend([
-                "## Already Generated Dependencies",
-                "",
-                "The following code has been generated for specs this one depends on.",
-                "Use these for import references and type hints.",
-                "",
-                dependency_context,
-                "",
-            ])
+            prompt_parts.extend(
+                [
+                    "## Already Generated Dependencies",
+                    "",
+                    "The following code has been generated for specs this one depends on.",
+                    "Use these for import references and type hints.",
+                    "",
+                    dependency_context,
+                    "",
+                ]
+            )
 
-        prompt_parts.extend([
-            "## Spec File",
-            "",
-            f"Category: {spec.category}",
-            f"Name: {spec.name}",
-            "",
-            "```spec",
-            spec.full_content,
-            "```",
-            "",
-            "## Instructions",
-            "",
-            "1. Read the spec carefully and understand all exports and tests.",
-            "2. Generate clean, idiomatic code for the target language.",
-            "3. Include proper imports for any dependencies.",
-            "4. Write ONLY stub code - interfaces and signatures, not implementations.",
-            "5. Write the file to the specified output path.",
-        ])
+        prompt_parts.extend(
+            [
+                "## Spec File",
+                "",
+                f"Category: {spec.category}",
+                f"Name: {spec.name}",
+                "",
+                "```spec",
+                spec.full_content,
+                "```",
+                "",
+                "## Instructions",
+                "",
+                "1. Read the spec carefully and understand all exports and tests.",
+                "2. Generate clean, idiomatic code for the target language.",
+                "3. Include proper imports for any dependencies.",
+                "4. Write ONLY stub code - interfaces and signatures, not implementations.",
+                "5. Write the file to the specified output path.",
+            ]
+        )
 
         return "\n".join(prompt_parts)
 

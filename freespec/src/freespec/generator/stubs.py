@@ -95,9 +95,7 @@ class StubGenerator:
         result = self.client.generate(prompt)
 
         if not result.success:
-            raise GenerationError(
-                f"Failed to generate stub for {spec.spec_id}: {result.error}"
-            )
+            raise GenerationError(f"Failed to generate stub for {spec.spec_id}: {result.error}")
 
         # Read the generated file content
         if output_path.exists():
@@ -161,9 +159,7 @@ class StubGenerator:
         result = self.client.generate(prompt)
 
         if not result.success:
-            raise GenerationError(
-                f"Failed to generate tests for {spec.spec_id}: {result.error}"
-            )
+            raise GenerationError(f"Failed to generate tests for {spec.spec_id}: {result.error}")
 
         if output_path.exists():
             content = output_path.read_text()
@@ -172,9 +168,7 @@ class StubGenerator:
             if content:
                 output_path.write_text(content)
             else:
-                raise GenerationError(
-                    f"Generated test file not found at {output_path}"
-                )
+                raise GenerationError(f"Generated test file not found at {output_path}")
 
         generated = GeneratedFile(
             spec_id=spec.spec_id,

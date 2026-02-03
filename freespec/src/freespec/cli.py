@@ -47,13 +47,15 @@ def main() -> None:
 
 @main.command()
 @click.option(
-    "-c", "--config",
+    "-c",
+    "--config",
     "config_path",
     type=click.Path(exists=True, path_type=Path),
     help="Path to freespec.yaml (auto-detected if not specified)",
 )
 @click.option(
-    "-v", "--verbose",
+    "-v",
+    "--verbose",
     is_flag=True,
     help="Enable verbose output",
 )
@@ -128,7 +130,8 @@ def headers(config_path: Path | None, verbose: bool) -> None:
 
 @main.command()
 @click.option(
-    "-c", "--config",
+    "-c",
+    "--config",
     "config_path",
     type=click.Path(exists=True, path_type=Path),
     help="Path to freespec.yaml (auto-detected if not specified)",
@@ -139,7 +142,8 @@ def headers(config_path: Path | None, verbose: bool) -> None:
     help="Skip import verification",
 )
 @click.option(
-    "-v", "--verbose",
+    "-v",
+    "--verbose",
     is_flag=True,
     help="Enable verbose output",
 )
@@ -225,7 +229,8 @@ def impl(config_path: Path | None, no_verify: bool, verbose: bool) -> None:
 
 @main.command()
 @click.option(
-    "-c", "--config",
+    "-c",
+    "--config",
     "config_path",
     type=click.Path(exists=True, path_type=Path),
     help="Path to freespec.yaml (auto-detected if not specified)",
@@ -236,7 +241,8 @@ def impl(config_path: Path | None, no_verify: bool, verbose: bool) -> None:
     help="Generate tests from headers instead of implementations (TDD workflow)",
 )
 @click.option(
-    "-v", "--verbose",
+    "-v",
+    "--verbose",
     is_flag=True,
     help="Enable verbose output",
 )
@@ -351,7 +357,8 @@ def _load_implementations(config: FreeSpecConfig) -> dict[str, str]:
 
 @main.command()
 @click.option(
-    "-c", "--config",
+    "-c",
+    "--config",
     "config_path",
     type=click.Path(exists=True, path_type=Path),
     help="Path to freespec.yaml (auto-detected if not specified)",
@@ -367,7 +374,8 @@ def _load_implementations(config: FreeSpecConfig) -> dict[str, str]:
     help="Skip import verification",
 )
 @click.option(
-    "-v", "--verbose",
+    "-v",
+    "--verbose",
     is_flag=True,
     help="Enable verbose output",
 )
@@ -454,9 +462,7 @@ def compile(
         # Stage 3: Generate implementations (Pass 2)
         click.echo("\nStage 3: Generating implementations (Pass 2)...")
         impl_generator = ImplementationGenerator(client=client)
-        impl_context = impl_generator.generate_all_impls(
-            specs, config, header_context.headers
-        )
+        impl_context = impl_generator.generate_all_impls(specs, config, header_context.headers)
         click.echo(f"  Generated {len(impl_context.generated_files)} implementation files")
 
         # Stage 4: Generate tests (optional)
@@ -516,7 +522,8 @@ def compile(
 
 @main.command()
 @click.option(
-    "-c", "--config",
+    "-c",
+    "--config",
     "config_path",
     type=click.Path(exists=True, path_type=Path),
     help="Path to freespec.yaml",

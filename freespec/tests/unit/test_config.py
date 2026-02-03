@@ -88,13 +88,15 @@ class TestLoadConfig:
 
     def test_load_defaults_for_optional_fields(self, tmp_path: Path) -> None:
         config_path = tmp_path / "freespec.yaml"
-        config_path.write_text(dedent("""
+        config_path.write_text(
+            dedent("""
             name: minimal
             version: "1.0"
             language: python
             specs:
               - "*.spec"
-        """).strip())
+        """).strip()
+        )
 
         config = load_config(config_path)
 
