@@ -100,7 +100,7 @@ class ClaudeCodeClient:
         Returns:
             GenerationResult based on execution.
         """
-        cmd = ["claude", "-p", prompt, "--permission-mode", "acceptEdits"]
+        cmd = ["claude", "-p", prompt, "--dangerously-skip-permissions"]
 
         process = subprocess.Popen(
             cmd,
