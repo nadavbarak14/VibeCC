@@ -75,7 +75,7 @@ class CoderWorker:
                 "",
                 "1. Complete this ticket by modifying the necessary files",
                 "2. After making all changes, commit them with a descriptive message",
-                f"3. The commit message should reference the ticket number (e.g., '#{task.ticket_id}')",
+                f"3. Reference ticket number in commit (e.g., '#{task.ticket_id}')",
             ]
         )
 
