@@ -64,49 +64,38 @@ class PromptBuilder:
         Returns:
             Complete prompt for the LLM.
         """
-        docs = self.load_docs()
-
         prompt_parts = [
-            "You are generating a HEADER/INTERFACE file from a FreeSpec specification.",
+            "Generate a HEADER/INTERFACE file from this FreeSpec specification.",
             "",
-            "## FreeSpec Documentation",
-            "",
-            docs,
+            "## Spec Format",
+            "- `description:` explains what this component is",
+            "- `exports:` lists the PUBLIC API - each line becomes a callable function/method",
+            "- `tests:` lists test cases (ignore for header generation)",
             "",
             "## Task",
             "",
-            f"Generate a {language.upper()} header/interface file for the following spec.",
-            "This is an INTERFACE file only - defines the public API, not implementation.",
+            f"Generate a {language.upper()} header/interface file.",
+            "This is an INTERFACE only - defines the public API, not implementation.",
             "",
             "Requirements:",
-            "- For entities: Create a dataclass with all described fields and types.",
-            "- For services/repositories: Create a class with method signatures.",
-            "- All methods must raise NotImplementedError() - no real implementation.",
-            "- Include complete type hints for all parameters and return types.",
-            "- Include docstrings describing each class and method.",
-            "- Do NOT import from other generated modules (this is a standalone interface).",
-            "- Use standard library types only (datetime, uuid, typing, etc.).",
-            "",
-            "## Output File",
-            "",
-            f"Write the generated code to: {output_path}",
+            "- Each export becomes a function or method that can be imported and called",
+            "- For entities: Create a dataclass with fields and CRUD methods",
+            "- For services: Create a class with method signatures matching exports",
+            "- All methods must raise NotImplementedError() - no real implementation",
+            "- Include complete type hints for all parameters and return types",
+            "- Do NOT import from other generated modules (standalone interface)",
+            "- Use standard library types only (datetime, uuid, typing, etc.)",
             "",
             "## Spec File",
             "",
             f"Category: {spec.category}",
             f"Name: {spec.name}",
             "",
-            "```spec",
+            "```",
             spec.full_content,
             "```",
             "",
-            "## Instructions",
-            "",
-            "1. Read the spec carefully and understand all exports.",
-            "2. Define all classes, dataclasses, and method signatures.",
-            "3. Every method body should be: raise NotImplementedError()",
-            "4. The file must be syntactically valid and importable.",
-            "5. Write the file to the specified output path.",
+            f"Write the generated code to: `{output_path}`",
         ]
 
         return "\n".join(prompt_parts)
@@ -369,20 +358,13 @@ class PromptBuilder:
         Returns:
             Complete prompt for the LLM.
         """
-        docs = self.load_docs()
-
         prompt_parts = [
-            "You are performing INDEPENDENT COMPILATION of a FreeSpec specification.",
-            "This is like gcc compiling a single .c file - you only see this file's interfaces.",
-            "",
-            "## FreeSpec Documentation",
-            "",
-            docs,
+            "INDEPENDENT COMPILATION of a FreeSpec specification.",
             "",
             "## Task",
             "",
             f"Generate BOTH the {language.upper()} implementation AND complete, passing tests.",
-            "The tests must actually run and pass - no skipped tests or placeholders.",
+            "Tests must actually run and pass - no skipped tests or placeholders.",
             "",
             "## Dependencies (Header Files)",
             "",

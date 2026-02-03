@@ -171,7 +171,6 @@ class TestPromptBuilder:
 
         # Should mention independent compilation
         assert "INDEPENDENT COMPILATION" in prompt
-        assert "gcc" in prompt.lower()
         # Should include both file paths
         assert str(impl_path) in prompt
         assert str(test_path) in prompt
