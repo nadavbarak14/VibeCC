@@ -57,23 +57,27 @@ class CoderWorker:
         ]
 
         if task.feedback:
-            prompt_parts.extend([
-                "",
-                "## Previous CI Feedback",
-                "",
-                "The CI pipeline failed on a previous attempt. Fix the following issues:",
-                "",
-                task.feedback,
-            ])
+            prompt_parts.extend(
+                [
+                    "",
+                    "## Previous CI Feedback",
+                    "",
+                    "The CI pipeline failed on a previous attempt. Fix the following issues:",
+                    "",
+                    task.feedback,
+                ]
+            )
 
-        prompt_parts.extend([
-            "",
-            "## Instructions",
-            "",
-            "1. Complete this ticket by modifying the necessary files",
-            "2. After making all changes, commit them with a descriptive message",
-            f"3. The commit message should reference the ticket number (e.g., '#{task.ticket_id}')",
-        ])
+        prompt_parts.extend(
+            [
+                "",
+                "## Instructions",
+                "",
+                "1. Complete this ticket by modifying the necessary files",
+                "2. After making all changes, commit them with a descriptive message",
+                f"3. The commit message should reference the ticket number (e.g., '#{task.ticket_id}')",
+            ]
+        )
 
         return "\n".join(prompt_parts)
 
