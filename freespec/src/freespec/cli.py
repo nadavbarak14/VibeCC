@@ -386,12 +386,18 @@ def _load_implementations(config: FreeSpecConfig) -> dict[str, str]:
     is_flag=True,
     help="Parse and validate specs without generating code",
 )
+@click.option(
+    "--skip-headers",
+    is_flag=True,
+    help="Skip header generation, use existing headers",
+)
 def compile(
     config_path: Path | None,
     max_retries: int,
     fail_fast: bool,
     verbose: bool,
     dry_run: bool,
+    skip_headers: bool,
 ) -> None:
     """Compile .spec files using independent compilation (gcc model).
 
@@ -457,11 +463,20 @@ def compile(
             click.echo("  Please ensure 'claude' is installed and in PATH", err=True)
             sys.exit(1)
 
-        # Stage 2: Generate headers (Pass 1)
-        click.echo("\nStage 2: Generating headers (Pass 1)...")
-        header_generator = HeaderGenerator(client=client)
-        header_context = header_generator.generate_all_headers(specs, config)
-        click.echo(f"  Generated {len(header_context.generated_files)} header files")
+        # Stage 2: Generate or load headers (Pass 1)
+        if skip_headers:
+            click.echo("\nStage 2: Loading existing headers...")
+            all_headers = load_headers(config)
+            if not all_headers:
+                click.echo("  Error: No headers found. Run without --skip-headers first.", err=True)
+                sys.exit(1)
+            click.echo(f"  Loaded {len(all_headers)} existing headers")
+        else:
+            click.echo("\nStage 2: Generating headers (Pass 1)...")
+            header_generator = HeaderGenerator(client=client)
+            header_context = header_generator.generate_all_headers(specs, config)
+            all_headers = header_context.headers
+            click.echo(f"  Generated {len(header_context.generated_files)} header files")
 
         # Stage 3: Independent compilation (Pass 2)
         click.echo(f"\nStage 3: Independent compilation (max retries: {max_retries})...")
@@ -469,7 +484,7 @@ def compile(
         compile_context = compiler.compile_all(
             specs=specs,
             config=config,
-            all_headers=header_context.headers,
+            all_headers=all_headers,
             fail_fast=fail_fast,
         )
 
