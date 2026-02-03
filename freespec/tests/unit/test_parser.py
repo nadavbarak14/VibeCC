@@ -121,13 +121,15 @@ class TestSpecParser:
 
     def test_parse_file_missing_section(self, parser: SpecParser, tmp_path: Path) -> None:
         spec_path = tmp_path / "incomplete.spec"
-        spec_path.write_text(dedent("""
+        spec_path.write_text(
+            dedent("""
             description:
             A thing.
 
             exports:
             - Do something
-        """).strip())
+        """).strip()
+        )
 
         with pytest.raises(ParseError, match="Missing required sections.*tests"):
             parser.parse_file(spec_path)
@@ -135,7 +137,8 @@ class TestSpecParser:
     def test_parse_extracts_mentions(self, parser: SpecParser, tmp_path: Path) -> None:
         spec_path = tmp_path / "services" / "enrollment.spec"
         spec_path.parent.mkdir(parents=True)
-        spec_path.write_text(dedent("""
+        spec_path.write_text(
+            dedent("""
             description:
             Uses @entities/student and @entities/course.
             Also depends on @services/auth.
@@ -145,7 +148,8 @@ class TestSpecParser:
 
             tests:
             - Test enrollment
-        """).strip())
+        """).strip()
+        )
 
         spec = parser.parse_file(spec_path)
 
@@ -153,7 +157,8 @@ class TestSpecParser:
 
     def test_parse_mentions_deduplicates(self, parser: SpecParser, tmp_path: Path) -> None:
         spec_path = tmp_path / "test.spec"
-        spec_path.write_text(dedent("""
+        spec_path.write_text(
+            dedent("""
             description:
             Uses @entities/student. Also uses @entities/student again.
 
@@ -162,7 +167,8 @@ class TestSpecParser:
 
             tests:
             - Test
-        """).strip())
+        """).strip()
+        )
 
         spec = parser.parse_file(spec_path)
 
@@ -173,7 +179,8 @@ class TestSpecParser:
         for name in ["student", "course"]:
             spec_path = tmp_path / "entities" / f"{name}.spec"
             spec_path.parent.mkdir(parents=True, exist_ok=True)
-            spec_path.write_text(dedent(f"""
+            spec_path.write_text(
+                dedent(f"""
                 description:
                 A {name}.
 
@@ -182,7 +189,8 @@ class TestSpecParser:
 
                 tests:
                 - Test {name}
-            """).strip())
+            """).strip()
+            )
 
         specs = parser.parse_glob("entities/*.spec", tmp_path)
 
@@ -195,7 +203,8 @@ class TestSpecParser:
         for category in ["entities", "services"]:
             spec_path = tmp_path / category / "test.spec"
             spec_path.parent.mkdir(parents=True, exist_ok=True)
-            spec_path.write_text(dedent("""
+            spec_path.write_text(
+                dedent("""
                 description:
                 A test.
 
@@ -204,7 +213,8 @@ class TestSpecParser:
 
                 tests:
                 - Test
-            """).strip())
+            """).strip()
+            )
 
         specs = parser.parse_glob("**/*.spec", tmp_path)
 

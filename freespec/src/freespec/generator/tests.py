@@ -97,9 +97,7 @@ class SkeletonTestGenerator:
         result = self.client.generate(prompt)
 
         if not result.success:
-            raise SkeletonGenError(
-                f"Failed to generate tests for {spec.spec_id}: {result.error}"
-            )
+            raise SkeletonGenError(f"Failed to generate tests for {spec.spec_id}: {result.error}")
 
         if output_path.exists():
             content = output_path.read_text()
@@ -108,9 +106,7 @@ class SkeletonTestGenerator:
             if content:
                 output_path.write_text(content)
             else:
-                raise SkeletonGenError(
-                    f"Generated test file not found at {output_path}"
-                )
+                raise SkeletonGenError(f"Generated test file not found at {output_path}")
 
         return GeneratedTest(
             spec_id=spec.spec_id,

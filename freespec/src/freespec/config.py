@@ -168,6 +168,4 @@ def find_config(start_path: Path | str | None = None) -> Path:
     if config_path.exists():
         return config_path
 
-    raise ConfigError(
-        f"No freespec.yaml found in {start_path} or any parent directory"
-    )
+    raise ConfigError(f"No freespec.yaml found in {start_path} or any parent directory")

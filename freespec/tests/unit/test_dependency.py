@@ -88,9 +88,7 @@ class TestDependencyResolver:
         assert errors[0].spec_id == "services/enrollment"
         assert errors[0].missing == "entities/student"
 
-    def test_validate_no_errors_when_deps_present(
-        self, resolver: DependencyResolver
-    ) -> None:
+    def test_validate_no_errors_when_deps_present(self, resolver: DependencyResolver) -> None:
         specs = [
             make_spec("student", "entities"),
             make_spec("enrollment", "services", mentions=["entities/student"]),

@@ -92,6 +92,7 @@ class TestMockedGeneration:
         def generate_stub(prompt: str) -> GenerationResult:
             # Extract output path from prompt
             import re
+
             match = re.search(r"Write.*to: (.+\.py)", prompt)
             if match:
                 path = Path(match.group(1))
@@ -121,7 +122,8 @@ class TestMockedGeneration:
         # Create a minimal spec
         spec_path = tmp_path / "entities" / "student.spec"
         spec_path.parent.mkdir(parents=True)
-        spec_path.write_text(dedent("""
+        spec_path.write_text(
+            dedent("""
             description:
             A student entity.
 
@@ -131,11 +133,13 @@ class TestMockedGeneration:
 
             tests:
             - Creating works
-        """).strip())
+        """).strip()
+        )
 
         # Create config
         config_path = tmp_path / "freespec.yaml"
-        config_path.write_text(dedent("""
+        config_path.write_text(
+            dedent("""
             name: test
             version: "1.0"
             language: python
@@ -145,7 +149,8 @@ class TestMockedGeneration:
               impl: generated/src/
               tests: generated/tests/
               api: generated/api/
-        """).strip())
+        """).strip()
+        )
 
         config = load_config(config_path)
 
@@ -171,7 +176,8 @@ class TestMockedGeneration:
         entities_dir.mkdir(parents=True)
         services_dir.mkdir(parents=True)
 
-        (entities_dir / "student.spec").write_text(dedent("""
+        (entities_dir / "student.spec").write_text(
+            dedent("""
             description:
             A student.
 
@@ -180,9 +186,11 @@ class TestMockedGeneration:
 
             tests:
             - Test
-        """).strip())
+        """).strip()
+        )
 
-        (services_dir / "enrollment.spec").write_text(dedent("""
+        (services_dir / "enrollment.spec").write_text(
+            dedent("""
             description:
             Uses @entities/student.
 
@@ -191,11 +199,13 @@ class TestMockedGeneration:
 
             tests:
             - Test
-        """).strip())
+        """).strip()
+        )
 
         # Create config
         config_path = tmp_path / "freespec.yaml"
-        config_path.write_text(dedent("""
+        config_path.write_text(
+            dedent("""
             name: test
             version: "1.0"
             language: python
@@ -205,7 +215,8 @@ class TestMockedGeneration:
               impl: generated/src/
               tests: generated/tests/
               api: generated/api/
-        """).strip())
+        """).strip()
+        )
 
         config = load_config(config_path)
 
@@ -240,11 +251,13 @@ class TestImportVerification:
     def test_verify_valid_python(self, tmp_path: Path) -> None:
         """Test verification of valid Python files."""
         py_file = tmp_path / "valid.py"
-        py_file.write_text(dedent("""
+        py_file.write_text(
+            dedent("""
             class Student:
                 def __init__(self, name: str) -> None:
                     self.name = name
-        """).strip())
+        """).strip()
+        )
 
         verifier = ImportVerifier()
         errors = verifier.verify_import(py_file)
@@ -279,10 +292,12 @@ class TestImportVerification:
         (tmp_path / "good2.py").write_text("y = 2\n")
 
         verifier = ImportVerifier()
-        result = verifier.verify_all([
-            tmp_path / "good1.py",
-            tmp_path / "good2.py",
-        ])
+        result = verifier.verify_all(
+            [
+                tmp_path / "good1.py",
+                tmp_path / "good2.py",
+            ]
+        )
 
         assert result.success
         assert len(result.errors) == 0
