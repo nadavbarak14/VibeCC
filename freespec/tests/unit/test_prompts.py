@@ -180,6 +180,9 @@ class TestPromptBuilder:
         assert "skip" in prompt.lower()
         # Should include spec content
         assert spec.name in prompt
+        # Should explain exports = public API
+        assert "Public API" in prompt or "IMPORTED AND CALLED" in prompt
+        assert "exports" in prompt.lower()
 
     def test_build_compile_prompt_with_headers(self, builder: PromptBuilder) -> None:
         """Should include header file paths in compile prompt."""
