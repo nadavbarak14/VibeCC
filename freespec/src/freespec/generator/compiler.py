@@ -33,7 +33,6 @@ class CompileResult:
     success: bool
     impl_path: Path | None = None
     test_path: Path | None = None
-    attempts: int = 1
     error: str | None = None
 
 
@@ -72,20 +71,17 @@ class IndependentCompiler:
         client: ClaudeCodeClient | None = None,
         prompt_builder: PromptBuilder | None = None,
         test_runner: PytestRunner | None = None,
-        max_retries: int = 3,
     ) -> None:
         """Initialize the independent compiler.
 
         Args:
             client: Claude Code client for LLM calls.
             prompt_builder: Builder for generation prompts.
-            test_runner: Runner for executing pytest.
-            max_retries: Maximum retry attempts per module (default: 3).
+            test_runner: Runner for executing pytest (for verification).
         """
         self.client = client or ClaudeCodeClient()
         self.prompt_builder = prompt_builder or PromptBuilder()
         self.test_runner = test_runner
-        self.max_retries = max_retries
 
     def _get_impl_path(self, spec: SpecFile, config: FreeSpecConfig) -> Path:
         """Determine output path for a spec's implementation file."""
@@ -152,6 +148,9 @@ class IndependentCompiler:
     ) -> CompileResult:
         """Compile a single spec file with test verification.
 
+        Claude Code handles iteration internally - we just prompt once
+        and let it work until tests pass.
+
         Args:
             spec: The spec to compile.
             context: Compilation context with config and all headers.
@@ -175,80 +174,64 @@ class IndependentCompiler:
             list(header_paths.keys()) or "none",
         )
 
-        previous_error: str | None = None
-
-        for attempt in range(self.max_retries + 1):
-            attempt_num = attempt + 1
-            logger.info("  Attempt %d/%d", attempt_num, self.max_retries + 1)
-
-            # Generate impl + tests together
-            prompt = self.prompt_builder.build_compile_prompt(
-                spec=spec,
-                language=context.config.language,
-                impl_path=impl_path,
-                test_path=test_path,
-                header_paths=header_paths,
-                previous_error=previous_error,
-            )
-
-            result = self.client.generate(prompt)
-
-            if not result.success:
-                logger.error("  LLM generation failed: %s", result.error)
-                return CompileResult(
-                    spec_id=spec.spec_id,
-                    success=False,
-                    impl_path=impl_path,
-                    test_path=test_path,
-                    attempts=attempt_num,
-                    error=f"LLM generation failed: {result.error}",
-                )
-
-            # Verify files were written
-            if not impl_path.exists():
-                code = self._extract_code_from_output(result.output)
-                if code:
-                    impl_path.write_text(code)
-                else:
-                    logger.warning("  Implementation file not written")
-
-            if not test_path.exists():
-                logger.warning("  Test file not written")
-                previous_error = (
-                    "Test file was not written. Please write both implementation and test files."
-                )
-                continue
-
-            # Run tests
-            runner = self.test_runner or PytestRunner(working_dir=context.config.root_path)
-            test_result = runner.run_test(test_path)
-
-            if test_result.success:
-                logger.info("  Tests passed!")
-                compile_result = CompileResult(
-                    spec_id=spec.spec_id,
-                    success=True,
-                    impl_path=impl_path,
-                    test_path=test_path,
-                    attempts=attempt_num,
-                )
-                context.results.append(compile_result)
-                return compile_result
-
-            # Tests failed - prepare for retry
-            logger.warning("  Tests failed (exit code %d)", test_result.returncode)
-            previous_error = test_result.output
-
-        # All retries exhausted
-        logger.error("  All attempts failed for %s", spec.spec_id)
-        compile_result = CompileResult(
-            spec_id=spec.spec_id,
-            success=False,
+        # Generate impl + tests - Claude Code will iterate until tests pass
+        prompt = self.prompt_builder.build_compile_prompt(
+            spec=spec,
+            language=context.config.language,
             impl_path=impl_path,
             test_path=test_path,
-            attempts=self.max_retries + 1,
-            error=f"Tests failed after {self.max_retries + 1} attempts:\n{previous_error}",
+            header_paths=header_paths,
         )
+
+        result = self.client.generate(prompt)
+
+        if not result.success:
+            logger.error("  Generation failed: %s", result.error)
+            compile_result = CompileResult(
+                spec_id=spec.spec_id,
+                success=False,
+                impl_path=impl_path,
+                test_path=test_path,
+                error=f"Generation failed: {result.error}",
+            )
+            context.results.append(compile_result)
+            return compile_result
+
+        # Verify files exist and tests pass
+        if not impl_path.exists() or not test_path.exists():
+            logger.error("  Files not written")
+            compile_result = CompileResult(
+                spec_id=spec.spec_id,
+                success=False,
+                impl_path=impl_path,
+                test_path=test_path,
+                error="Implementation or test file not written",
+            )
+            context.results.append(compile_result)
+            return compile_result
+
+        # Verify tests pass
+        runner = self.test_runner or PytestRunner(working_dir=context.config.root_path)
+        test_result = runner.run_test(test_path)
+
+        if test_result.success:
+            logger.info("  Tests passed!")
+            compile_result = CompileResult(
+                spec_id=spec.spec_id,
+                success=True,
+                impl_path=impl_path,
+                test_path=test_path,
+            )
+        else:
+            logger.warning("  Tests failed")
+            compile_result = CompileResult(
+                spec_id=spec.spec_id,
+                success=False,
+                impl_path=impl_path,
+                test_path=test_path,
+                error=f"Tests failed:\n{test_result.output}",
+            )
+
         context.results.append(compile_result)
         return compile_result
 

@@ -365,12 +365,6 @@ def _load_implementations(config: FreeSpecConfig) -> dict[str, str]:
     help="Path to freespec.yaml (auto-detected if not specified)",
 )
 @click.option(
-    "--max-retries",
-    default=3,
-    type=int,
-    help="Maximum retry attempts per module (default: 3)",
-)
-@click.option(
     "--fail-fast",
     is_flag=True,
     help="Stop on first module failure",
@@ -393,7 +387,6 @@ def _load_implementations(config: FreeSpecConfig) -> dict[str, str]:
 )
 def compile(
     config_path: Path | None,
-    max_retries: int,
     fail_fast: bool,
     verbose: bool,
     dry_run: bool,
@@ -479,8 +472,8 @@ def compile(
             click.echo(f"  Generated {len(header_context.generated_files)} header files")
 
         # Stage 3: Independent compilation (Pass 2)
-        click.echo(f"\nStage 3: Independent compilation (max retries: {max_retries})...")
-        compiler = IndependentCompiler(client=client, max_retries=max_retries)
+        click.echo("\nStage 3: Independent compilation...")
+        compiler = IndependentCompiler(client=client)
         compile_context = compiler.compile_all(
             specs=specs,
             config=config,
@@ -492,8 +485,7 @@ def compile(
         click.echo("\nCompilation Results:")
         for result in compile_context.results:
             status = "[PASS]" if result.success else "[FAIL]"
-            retry_info = f" ({result.attempts} attempt{'s' if result.attempts > 1 else ''})"
-            click.echo(f"  {status} {result.spec_id}{retry_info}")
+            click.echo(f"  {status} {result.spec_id}")
 
         # Summary
         passed = len(compile_context.passed)

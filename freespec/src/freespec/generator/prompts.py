@@ -339,13 +339,11 @@ class PromptBuilder:
         impl_path: Path,
         test_path: Path,
         header_paths: dict[str, Path] | None = None,
-        previous_error: str | None = None,
     ) -> str:
         """Build a prompt for independent compilation (impl + tests together).
 
         This generates both implementation and tests in a single LLM call.
-        Tests mock all dependencies using the provided headers. If retrying,
-        includes the previous pytest output for error feedback.
+        Claude Code will iterate internally until tests pass.
 
         Args:
             spec: The spec file to compile.
@@ -353,7 +351,6 @@ class PromptBuilder:
             impl_path: Where the implementation will be written.
             test_path: Where the test file will be written.
             header_paths: Map of @mentioned spec_id to their header file paths.
-            previous_error: Previous pytest output if retrying after failure.
 
         Returns:
             Complete prompt for the LLM.
@@ -364,7 +361,7 @@ class PromptBuilder:
             "## Task",
             "",
             f"Generate BOTH the {language.upper()} implementation AND complete, passing tests.",
-            "Tests must actually run and pass - no skipped tests or placeholders.",
+            "Run the tests with pytest and iterate until they pass.",
             "",
             "## Dependencies (Header Files)",
             "",
@@ -396,22 +393,6 @@ class PromptBuilder:
             prompt_parts.extend(
                 [
                     "This module has no external dependencies (@mentions).",
-                    "",
-                ]
-            )
-
-        if previous_error:
-            prompt_parts.extend(
-                [
-                    "## PREVIOUS ATTEMPT FAILED",
-                    "",
-                    "The previous implementation/tests had errors. Fix them:",
-                    "",
-                    "```",
-                    previous_error,
-                    "```",
-                    "",
-                    "Analyze the errors above and generate corrected code.",
                     "",
                 ]
             )

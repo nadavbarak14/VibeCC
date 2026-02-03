@@ -223,45 +223,6 @@ class TestPromptBuilder:
         # Should mention no external dependencies
         assert "no external dependencies" in prompt.lower()
 
-    def test_build_compile_prompt_with_previous_error(self, builder: PromptBuilder) -> None:
-        """Should include previous error for retry attempts."""
-        spec = make_spec("student", "entities")
-        impl_path = Path("/output/src/entities/student.py")
-        test_path = Path("/output/tests/entities/test_student.py")
-        previous_error = "AssertionError: expected 5, got 3"
-
-        prompt = builder.build_compile_prompt(
-            spec=spec,
-            language="python",
-            impl_path=impl_path,
-            test_path=test_path,
-            header_paths={},
-            previous_error=previous_error,
-        )
-
-        # Should include the error
-        assert "PREVIOUS ATTEMPT FAILED" in prompt
-        assert previous_error in prompt
-        # Should ask for correction
-        assert "fix" in prompt.lower() or "correct" in prompt.lower()
-
-    def test_build_compile_prompt_without_previous_error(self, builder: PromptBuilder) -> None:
-        """Should not include error section on first attempt."""
-        spec = make_spec("student", "entities")
-        impl_path = Path("/output/src/entities/student.py")
-        test_path = Path("/output/tests/entities/test_student.py")
-
-        prompt = builder.build_compile_prompt(
-            spec=spec,
-            language="python",
-            impl_path=impl_path,
-            test_path=test_path,
-            header_paths={},
-            previous_error=None,
-        )
-
-        assert "PREVIOUS ATTEMPT FAILED" not in prompt
-
     def test_build_compile_prompt_requires_mocking(self, builder: PromptBuilder) -> None:
         """Should instruct to mock dependencies."""
         spec = make_spec("enrollment", "services", mentions=["entities/student"])

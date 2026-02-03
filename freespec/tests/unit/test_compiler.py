@@ -55,12 +55,10 @@ class TestCompileResult:
             success=True,
             impl_path=tmp_path / "student.py",
             test_path=tmp_path / "test_student.py",
-            attempts=1,
         )
 
         assert result.success is True
         assert result.spec_id == "entities/student"
-        assert result.attempts == 1
         assert result.error is None
 
     def test_failure_result(self, tmp_path: Path) -> None:
@@ -70,12 +68,10 @@ class TestCompileResult:
             success=False,
             impl_path=tmp_path / "student.py",
             test_path=tmp_path / "test_student.py",
-            attempts=3,
             error="Tests failed",
         )
 
         assert result.success is False
-        assert result.attempts == 3
         assert result.error == "Tests failed"
 
 
@@ -120,15 +116,8 @@ class TestIndependentCompiler:
         """Should initialize with default values."""
         compiler = IndependentCompiler()
 
-        assert compiler.max_retries == 3
         assert compiler.client is not None
         assert compiler.prompt_builder is not None
-
-    def test_init_custom_retries(self) -> None:
-        """Should accept custom max retries."""
-        compiler = IndependentCompiler(max_retries=5)
-
-        assert compiler.max_retries == 5
 
     def test_get_impl_path_entities(self, tmp_path: Path) -> None:
         """Should generate correct path for entity implementations."""
@@ -194,8 +183,8 @@ class TestIndependentCompiler:
 
         assert filtered == {}
 
-    def test_compile_file_success_first_attempt(self, tmp_path: Path) -> None:
-        """Should succeed on first attempt when tests pass."""
+    def test_compile_file_success(self, tmp_path: Path) -> None:
+        """Should succeed when generation and tests pass."""
         config = make_config(tmp_path)
         spec = make_spec("student", "entities")
         all_headers = {"entities/student": "class Student: pass"}
@@ -219,7 +208,6 @@ class TestIndependentCompiler:
         compiler = IndependentCompiler(
             client=mock_client,
             test_runner=mock_runner,
-            max_retries=3,
         )
         context = CompileContext(config=config, all_headers=all_headers)
 
@@ -234,18 +222,16 @@ class TestIndependentCompiler:
         result = compiler.compile_file(spec, context)
 
         assert result.success is True
-        assert result.attempts == 1
         assert result.spec_id == "entities/student"
         mock_client.generate.assert_called_once()
         mock_runner.run_test.assert_called_once()
 
-    def test_compile_file_retry_on_test_failure(self, tmp_path: Path) -> None:
-        """Should retry when tests fail."""
+    def test_compile_file_test_failure(self, tmp_path: Path) -> None:
+        """Should fail when tests fail."""
         config = make_config(tmp_path)
         spec = make_spec("student", "entities")
         all_headers = {}
 
-        # Mock LLM client
         mock_client = MagicMock()
         mock_client.generate.return_value = GenerationResult(
             success=True,
@@ -253,49 +239,6 @@ class TestIndependentCompiler:
             error=None,
         )
 
-        # Mock test runner - fail first, then succeed
-        mock_runner = MagicMock()
-        mock_runner.run_test.side_effect = [
-            RunResult(success=False, output="1 failed", returncode=1),
-            RunResult(success=True, output="1 passed", returncode=0),
-        ]
-
-        compiler = IndependentCompiler(
-            client=mock_client,
-            test_runner=mock_runner,
-            max_retries=3,
-        )
-        context = CompileContext(config=config, all_headers=all_headers)
-
-        # Create the expected output paths
-        impl_path = compiler._get_impl_path(spec, config)
-        test_path = compiler._get_test_path(spec, config)
-        impl_path.parent.mkdir(parents=True, exist_ok=True)
-        test_path.parent.mkdir(parents=True, exist_ok=True)
-        impl_path.write_text("class Student: pass")
-        test_path.write_text("def test_student(): pass")
-
-        result = compiler.compile_file(spec, context)
-
-        assert result.success is True
-        assert result.attempts == 2
-        assert mock_client.generate.call_count == 2
-
-    def test_compile_file_max_retries_exhausted(self, tmp_path: Path) -> None:
-        """Should fail after max retries exhausted."""
-        config = make_config(tmp_path)
-        spec = make_spec("student", "entities")
-        all_headers = {}
-
-        # Mock LLM client
-        mock_client = MagicMock()
-        mock_client.generate.return_value = GenerationResult(
-            success=True,
-            output="Generated code",
-            error=None,
-        )
-
-        # Mock test runner - always fail
         mock_runner = MagicMock()
         mock_runner.run_test.return_value = RunResult(
             success=False,
@@ -306,11 +249,9 @@ class TestIndependentCompiler:
         compiler = IndependentCompiler(
             client=mock_client,
             test_runner=mock_runner,
-            max_retries=2,
         )
         context = CompileContext(config=config, all_headers=all_headers)
 
-        # Create the expected output paths
         impl_path = compiler._get_impl_path(spec, config)
         test_path = compiler._get_test_path(spec, config)
         impl_path.parent.mkdir(parents=True, exist_ok=True)
@@ -321,16 +262,14 @@ class TestIndependentCompiler:
         result = compiler.compile_file(spec, context)
 
         assert result.success is False
-        assert result.attempts == 3  # Initial + 2 retries
-        assert "failed after" in result.error.lower()
+        assert "Tests failed" in result.error
 
     def test_compile_file_llm_failure(self, tmp_path: Path) -> None:
-        """Should fail immediately on LLM error."""
+        """Should fail on LLM error."""
         config = make_config(tmp_path)
         spec = make_spec("student", "entities")
         all_headers = {}
 
-        # Mock LLM client - return failure
         mock_client = MagicMock()
         mock_client.generate.return_value = GenerationResult(
             success=False,
@@ -338,14 +277,13 @@ class TestIndependentCompiler:
             error="API error",
         )
 
-        compiler = IndependentCompiler(client=mock_client, max_retries=3)
+        compiler = IndependentCompiler(client=mock_client)
         context = CompileContext(config=config, all_headers=all_headers)
 
         result = compiler.compile_file(spec, context)
 
         assert result.success is False
-        assert result.attempts == 1
-        assert "LLM generation failed" in result.error
+        assert "Generation failed" in result.error
 
     def test_compile_file_passes_header_paths(self, tmp_path: Path) -> None:
         """Should pass header file paths for @mentioned dependencies."""
@@ -394,49 +332,6 @@ class TestIndependentCompiler:
         assert "header_paths" in call_kwargs
         assert "entities/student" in call_kwargs["header_paths"]
         assert call_kwargs["header_paths"]["entities/student"] == student_header
-
-    def test_compile_file_passes_error_on_retry(self, tmp_path: Path) -> None:
-        """Should pass previous error to prompt builder on retry."""
-        config = make_config(tmp_path)
-        spec = make_spec("student", "entities")
-
-        mock_client = MagicMock()
-        mock_client.generate.return_value = GenerationResult(
-            success=True, output="code", error=None
-        )
-
-        mock_builder = MagicMock()
-        mock_builder.build_compile_prompt.return_value = "prompt"
-
-        mock_runner = MagicMock()
-        mock_runner.run_test.side_effect = [
-            RunResult(success=False, output="AssertionError", returncode=1),
-            RunResult(success=True, output="passed", returncode=0),
-        ]
-
-        compiler = IndependentCompiler(
-            client=mock_client,
-            prompt_builder=mock_builder,
-            test_runner=mock_runner,
-        )
-        context = CompileContext(config=config, all_headers={})
-
-        impl_path = compiler._get_impl_path(spec, config)
-        test_path = compiler._get_test_path(spec, config)
-        impl_path.parent.mkdir(parents=True, exist_ok=True)
-        test_path.parent.mkdir(parents=True, exist_ok=True)
-        impl_path.write_text("code")
-        test_path.write_text("test")
-
-        compiler.compile_file(spec, context)
-
-        # First call should have no previous error
-        first_call = mock_builder.build_compile_prompt.call_args_list[0]
-        assert first_call.kwargs["previous_error"] is None
-
-        # Second call should have the error
-        second_call = mock_builder.build_compile_prompt.call_args_list[1]
-        assert "AssertionError" in second_call.kwargs["previous_error"]
 
     def test_compile_all_processes_all_specs(self, tmp_path: Path) -> None:
         """Should compile all specs."""
@@ -495,7 +390,6 @@ class TestIndependentCompiler:
         compiler = IndependentCompiler(
             client=mock_client,
             test_runner=mock_runner,
-            max_retries=0,  # No retries for faster test
         )
 
         # Create directories for first spec
