@@ -171,6 +171,9 @@ class ImplementationGenerator:
     def _get_impl_path(self, spec: SpecFile, config: FreeSpecConfig) -> Path:
         """Determine output path for a spec's implementation file.
 
+        All output goes to the single out/ directory mirroring spec structure:
+        specs/entities/student.spec → out/entities/student.py
+
         Args:
             spec: The spec file.
             config: Project configuration.
@@ -178,12 +181,8 @@ class ImplementationGenerator:
         Returns:
             Path where implementation file should be written.
         """
-        if spec.category == "api":
-            base = config.get_output_path("api")
-            return base / f"{spec.name}.py"
-        else:
-            base = config.get_output_path("impl")
-            return base / spec.category / f"{spec.name}.py"
+        base = config.get_output_path()
+        return base / spec.category / f"{spec.name}.py"
 
     def _extract_code_from_output(self, output: str) -> str | None:
         """Try to extract code from LLM output if file wasn't written.

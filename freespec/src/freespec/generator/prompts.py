@@ -107,6 +107,21 @@ class PromptBuilder:
                     "- Include complete type hints for all parameters and return types",
                     "- Do NOT import from other generated modules (standalone interface)",
                     "- Use standard library types only (datetime, uuid, typing, etc.)",
+                    "",
+                    "## COMPLETENESS REQUIREMENTS",
+                    "",
+                    "The stub must be COMPLETE - the implementation step will only fill in bodies:",
+                    "",
+                    "- Include COMPLETE enum definitions with all values",
+                    "- Include docstrings for EVERY function and class explaining:",
+                    "  - What the function does",
+                    "  - Parameters and their types",
+                    "  - Return value and type",
+                    "  - Possible exceptions",
+                    "- Include all type aliases and TypedDicts needed",
+                    "- For dataclasses: include all fields with types and defaults",
+                    "- Types must be fully specified (no Any unless absolutely necessary)",
+                    "- All methods must raise NotImplementedError()",
                 ]
             )
 
@@ -368,15 +383,15 @@ class PromptBuilder:
         test_path: Path,
         header_paths: dict[str, Path] | None = None,
     ) -> str:
-        """Build a prompt for independent compilation (impl + tests together).
+        """Build a prompt for in-place compilation (modify stub + create tests).
 
-        This generates both implementation and tests in a single LLM call.
-        Claude Code will iterate internally until tests pass.
+        The stub file already exists at impl_path. This prompt instructs the LLM
+        to fill in the implementation bodies without changing the public API.
 
         Args:
             spec: The spec file to compile.
             language: Target programming language.
-            impl_path: Where the implementation will be written.
+            impl_path: Path to the existing stub file (will be modified in-place).
             test_path: Where the test file will be written.
             header_paths: Map of @mentioned spec_id to their header file paths.
 
@@ -387,20 +402,40 @@ class PromptBuilder:
         lang_info = self._get_language_info(language)
 
         prompt_parts = [
-            "INDEPENDENT COMPILATION of a FreeSpec specification.",
+            "IN-PLACE COMPILATION of a FreeSpec specification.",
             "",
             "## Task",
             "",
-            f"Generate BOTH the {language.upper()} implementation AND complete, passing tests.",
-            f"Run the tests with {lang_info['test_runner']} and iterate until they pass.",
+            "You are implementing an EXISTING stub file. The stub already defines:",
+            "- All public classes and functions",
+            "- All type hints and signatures",
+            "- All docstrings",
             "",
-            "## Dependencies (Header Files)",
+            "Your job is to:",
+            "1. Read the existing stub file",
+            "2. Replace NotImplementedError() with working code",
+            "3. Write tests that verify the implementation",
+            f"4. Run tests with {lang_info['test_runner']} and iterate until they pass",
+            "",
+            "## CRITICAL CONSTRAINTS",
+            "",
+            "- DO NOT add new public exports (classes, functions, constants)",
+            "- DO NOT modify function signatures or type hints",
+            "- DO NOT change docstrings",
+            "- ONLY replace NotImplementedError() with working code",
+            "- Private helpers (names starting with _) ARE allowed",
+            "",
+            "## Existing Stub File",
+            "",
+            f"Read the existing stub at: `{impl_path}`",
             "",
         ]
 
         if header_paths:
             prompt_parts.extend(
                 [
+                    "## Dependencies (Header Files)",
+                    "",
                     "This module depends on the following interfaces.",
                     "READ these header files to understand the API signatures:",
                     "",
@@ -416,15 +451,6 @@ class PromptBuilder:
                     "- Method signatures and return types",
                     "- How to properly instantiate and use these classes",
                     "",
-                    f"In your tests, {lang_info['mock_instruction']}",
-                    "",
-                ]
-            )
-        else:
-            prompt_parts.extend(
-                [
-                    "This module has no external dependencies (@mentions).",
-                    "",
                 ]
             )
 
@@ -439,43 +465,35 @@ class PromptBuilder:
                 spec.full_content,
                 "```",
                 "",
-                "## Understanding the Spec Format",
-                "",
-                "### exports: = The Public API",
-                "Each line in `exports:` is something that CAN BE CALLED.",
-                "These become the public functions/methods of your implementation.",
-                f"Example: 'Create a new student' → {lang_info['example_function']}",
-                "",
-                "### tests: = Test Cases",
-                "Each line describes a test that must pass. Implement tests that verify these.",
-                "",
                 "## Output Files",
                 "",
-                f"1. Implementation: `{impl_path}`",
-                f"2. Tests: `{test_path}`",
+                f"1. Implementation (modify in-place): `{impl_path}`",
+                f"2. Tests (create new): `{test_path}`",
                 "",
                 "## Requirements",
                 "",
                 "### Implementation",
-                "- Each export becomes a callable function or method",
+                "- Read the existing stub file first",
+                "- Keep all existing signatures, types, and docstrings",
+                "- Only fill in method/function bodies",
                 f"- {lang_info['impl_requirements']}",
-                "- Include dependencies from the header files listed above (if any)",
                 "",
                 "### Tests",
                 f"- {lang_info['test_requirements']}",
+                "- Import directly from the implementation file",
                 "- Write COMPLETE tests that actually verify the implementation",
-                f"- {lang_info['mock_instruction']}",
+                "- DO NOT mock the module under test",
+                "- External dependencies (DB, network, etc.) MAY be mocked",
                 f"- Tests must PASS - {lang_info['no_skip_instruction']}",
                 "- Test the behavior described in the spec's tests section",
                 "",
                 "## Instructions",
                 "",
-                "1. If there are dependencies, READ the header files first to understand the APIs",
-                "2. Read the spec - understand what exports need to be implemented",
-                "3. Write the implementation exposing all exports as callable API",
-                "4. Write tests that call the implementation's API",
+                "1. READ the existing stub file at the implementation path",
+                "2. If there are dependencies, READ the header files to understand the APIs",
+                "3. Fill in implementation bodies (replace NotImplementedError)",
+                "4. Write tests that import and call the implementation's public API",
                 f"5. Run tests with {lang_info['test_command']} and iterate until they pass",
-                "6. Write BOTH files to the specified paths",
             ]
         )
 
@@ -486,6 +504,7 @@ class PromptBuilder:
         spec: SpecFile,
         impl_path: Path,
         test_path: Path,
+        original_exports: set[str] | None = None,
     ) -> str:
         """Build a prompt to review if implementation fulfills the spec.
 
@@ -496,6 +515,7 @@ class PromptBuilder:
             spec: The original spec file.
             impl_path: Path to the generated implementation file.
             test_path: Path to the generated test file.
+            original_exports: Set of public exports from the original stub.
 
         Returns:
             Complete review prompt for the LLM.
@@ -509,26 +529,64 @@ class PromptBuilder:
             spec.full_content,
             "```",
             "",
-            "## Your Task",
-            "",
-            "1. Read the implementation at `{impl_path}`".format(impl_path=impl_path),
-            "2. Read the tests at `{test_path}`".format(test_path=test_path),
-            "3. Check if ALL exports from the spec are properly implemented",
-            "4. Check if ALL test cases from the spec are covered",
-            "5. Check if the implementation matches the description",
-            "",
-            "## Response Format",
-            "",
-            "If everything is correct, respond with exactly:",
-            "REVIEW_PASSED",
-            "",
-            "If there are issues, respond with:",
-            "REVIEW_FAILED",
-            "- Issue 1: ...",
-            "- Issue 2: ...",
-            "",
-            "Then fix the issues and run the tests again.",
         ]
+
+        # Add export validation section if exports are provided
+        if original_exports:
+            prompt_parts.extend(
+                [
+                    "## EXPORT VALIDATION",
+                    "",
+                    "The original stub had these public exports:",
+                    "",
+                ]
+            )
+            for export in sorted(original_exports):
+                prompt_parts.append(f"- {export}")
+            prompt_parts.extend(
+                [
+                    "",
+                    "CHECK: The implementation MUST have EXACTLY these same exports.",
+                    "- No new public classes, functions, or constants allowed",
+                    "- Private names (starting with _) ARE allowed",
+                    "- Report REVIEW_FAILED if exports don't match",
+                    "",
+                ]
+            )
+
+        prompt_parts.extend(
+            [
+                "## Your Task",
+                "",
+                f"1. Read the implementation at `{impl_path}`",
+                f"2. Read the tests at `{test_path}`",
+                "3. Check if ALL exports from the spec are properly implemented",
+                "4. Check if ALL test cases from the spec are covered",
+                "5. Check if the implementation matches the description",
+            ]
+        )
+
+        if original_exports:
+            prompt_parts.append(
+                "6. Verify that public exports match the original stub exactly"
+            )
+
+        prompt_parts.extend(
+            [
+                "",
+                "## Response Format",
+                "",
+                "If everything is correct, respond with exactly:",
+                "REVIEW_PASSED",
+                "",
+                "If there are issues, respond with:",
+                "REVIEW_FAILED",
+                "- Issue 1: ...",
+                "- Issue 2: ...",
+                "",
+                "Then fix the issues and run the tests again.",
+            ]
+        )
 
         return "\n".join(prompt_parts)
 
@@ -565,10 +623,15 @@ class PromptBuilder:
             return {
                 "test_runner": "pytest",
                 "test_command": "pytest",
-                "mock_instruction": "mock external dependencies using unittest.mock",
+                "mock_instruction": (
+                    "mock ONLY external dependencies (DB, network) using unittest.mock"
+                ),
                 "example_function": "`create_student()` or `Student.create()`",
                 "impl_requirements": "Use proper type hints throughout",
-                "test_requirements": "Import and USE the implementation's public API (the exports)",
+                "test_requirements": (
+                    "Import directly from the implementation file "
+                    "(e.g., from out.entities.student import Student)"
+                ),
                 "no_skip_instruction": "no @pytest.mark.skip or pending markers",
                 "header_ext": ".py",
                 "impl_ext": ".py",

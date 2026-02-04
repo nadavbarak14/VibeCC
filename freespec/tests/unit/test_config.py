@@ -24,9 +24,7 @@ def temp_config(tmp_path: Path) -> Path:
           - "**/*.spec"
 
         output:
-          api: generated/api/
-          impl: generated/src/
-          tests: generated/tests/
+          out: out/
 
         settings:
           interactive: false
@@ -52,10 +50,7 @@ class TestLoadConfig:
     def test_load_output_config(self, temp_config: Path) -> None:
         config = load_config(temp_config)
 
-        assert config.output.headers == "generated/headers/"
-        assert config.output.api == "generated/api/"
-        assert config.output.impl == "generated/src/"
-        assert config.output.tests == "generated/tests/"
+        assert config.output.out == "out/"
 
     def test_load_settings_config(self, temp_config: Path) -> None:
         config = load_config(temp_config)
@@ -101,7 +96,7 @@ class TestLoadConfig:
         config = load_config(config_path)
 
         # Should use defaults
-        assert config.output.api == "generated/api/"
+        assert config.output.out == "out/"
         assert config.settings.interactive is True
 
 
@@ -111,21 +106,9 @@ class TestFreeSpecConfig:
     def test_get_output_path(self, temp_config: Path) -> None:
         config = load_config(temp_config)
 
-        headers_path = config.get_output_path("headers")
-        api_path = config.get_output_path("api")
-        impl_path = config.get_output_path("impl")
-        tests_path = config.get_output_path("tests")
+        out_path = config.get_output_path()
 
-        assert headers_path == config.root_path / "generated/headers/"
-        assert api_path == config.root_path / "generated/api/"
-        assert impl_path == config.root_path / "generated/src/"
-        assert tests_path == config.root_path / "generated/tests/"
-
-    def test_get_output_path_invalid_category(self, temp_config: Path) -> None:
-        config = load_config(temp_config)
-
-        with pytest.raises(ValueError, match="Invalid category"):
-            config.get_output_path("invalid")
+        assert out_path == config.root_path / "out/"
 
 
 class TestFindConfig:

@@ -44,7 +44,7 @@ class TestPromptBuilder:
     def test_build_header_prompt(self, builder: PromptBuilder) -> None:
         """Should build a header generation prompt."""
         spec = make_spec("student", "entities")
-        output_path = Path("/output/headers/entities/student.py")
+        output_path = Path("/output/entities/student.py")
 
         prompt = builder.build_header_prompt(
             spec=spec,
@@ -61,6 +61,26 @@ class TestPromptBuilder:
         assert "entities" in prompt
         # Should NOT mention dependencies
         assert "dependencies" not in prompt.lower() or "do not" in prompt.lower()
+
+    def test_build_header_prompt_completeness(self, builder: PromptBuilder) -> None:
+        """Should require complete stubs with docstrings and types."""
+        spec = make_spec("student", "entities")
+        output_path = Path("/output/entities/student.py")
+
+        prompt = builder.build_header_prompt(
+            spec=spec,
+            language="python",
+            output_path=output_path,
+        )
+
+        # Should mention completeness requirements
+        assert "COMPLETENESS" in prompt or "COMPLETE" in prompt
+        # Should require docstrings
+        assert "docstring" in prompt.lower()
+        # Should require enums
+        assert "enum" in prompt.lower()
+        # Should require full type hints
+        assert "type" in prompt.lower()
 
     def test_build_impl_prompt_without_headers(self, builder: PromptBuilder) -> None:
         """Should build an implementation prompt without headers."""
@@ -158,8 +178,8 @@ class TestPromptBuilder:
     def test_build_compile_prompt_basic(self, builder: PromptBuilder) -> None:
         """Should build a compile prompt with impl and test paths."""
         spec = make_spec("student", "entities")
-        impl_path = Path("/output/src/entities/student.py")
-        test_path = Path("/output/tests/entities/test_student.py")
+        impl_path = Path("/output/entities/student.py")
+        test_path = Path("/output/entities/test_student.py")
 
         prompt = builder.build_compile_prompt(
             spec=spec,
@@ -169,8 +189,8 @@ class TestPromptBuilder:
             header_paths={},
         )
 
-        # Should mention independent compilation
-        assert "INDEPENDENT COMPILATION" in prompt
+        # Should mention in-place compilation
+        assert "IN-PLACE COMPILATION" in prompt
         # Should include both file paths
         assert str(impl_path) in prompt
         assert str(test_path) in prompt
@@ -179,17 +199,18 @@ class TestPromptBuilder:
         assert "skip" in prompt.lower()
         # Should include spec content
         assert spec.name in prompt
-        # Should explain exports = public API
-        assert "Public API" in prompt or "IMPORTED AND CALLED" in prompt
-        assert "exports" in prompt.lower()
+        # Should include critical constraints about exports
+        assert "DO NOT add new" in prompt or "new public exports" in prompt.lower()
+        # Should mention reading existing stub
+        assert "existing stub" in prompt.lower() or "read" in prompt.lower()
 
     def test_build_compile_prompt_with_headers(self, builder: PromptBuilder) -> None:
         """Should include header file paths in compile prompt."""
         spec = make_spec("enrollment", "services", mentions=["entities/student"])
-        impl_path = Path("/output/src/services/enrollment.py")
-        test_path = Path("/output/tests/services/test_enrollment.py")
+        impl_path = Path("/output/services/enrollment.py")
+        test_path = Path("/output/services/test_enrollment.py")
         header_paths = {
-            "entities/student": Path("/output/headers/entities/student.py"),
+            "entities/student": Path("/output/entities/student.py"),
         }
 
         prompt = builder.build_compile_prompt(
@@ -202,15 +223,15 @@ class TestPromptBuilder:
 
         # Should include the header path
         assert "entities/student" in prompt
-        assert "/output/headers/entities/student.py" in prompt
+        assert "/output/entities/student.py" in prompt
         # Should instruct to READ the header files
         assert "READ" in prompt
 
     def test_build_compile_prompt_no_dependencies(self, builder: PromptBuilder) -> None:
-        """Should note when there are no dependencies."""
+        """Should not include dependencies section when there are none."""
         spec = make_spec("student", "entities")
-        impl_path = Path("/output/src/entities/student.py")
-        test_path = Path("/output/tests/entities/test_student.py")
+        impl_path = Path("/output/entities/student.py")
+        test_path = Path("/output/entities/test_student.py")
 
         prompt = builder.build_compile_prompt(
             spec=spec,
@@ -220,15 +241,15 @@ class TestPromptBuilder:
             header_paths={},
         )
 
-        # Should mention no external dependencies
-        assert "no external dependencies" in prompt.lower()
+        # Should not have dependencies section when empty
+        assert "Dependencies (Header Files)" not in prompt
 
-    def test_build_compile_prompt_requires_mocking(self, builder: PromptBuilder) -> None:
-        """Should instruct to mock dependencies."""
+    def test_build_compile_prompt_mocking_external_only(self, builder: PromptBuilder) -> None:
+        """Should instruct to mock only external dependencies."""
         spec = make_spec("enrollment", "services", mentions=["entities/student"])
-        impl_path = Path("/output/src/services/enrollment.py")
-        test_path = Path("/output/tests/services/test_enrollment.py")
-        header_paths = {"entities/student": Path("/output/headers/entities/student.py")}
+        impl_path = Path("/output/services/enrollment.py")
+        test_path = Path("/output/services/test_enrollment.py")
+        header_paths = {"entities/student": Path("/output/entities/student.py")}
 
         prompt = builder.build_compile_prompt(
             spec=spec,
@@ -238,8 +259,9 @@ class TestPromptBuilder:
             header_paths=header_paths,
         )
 
-        # Should mention mocking
+        # Should mention mocking external dependencies only
         assert "mock" in prompt.lower()
+        assert "external" in prompt.lower() or "DO NOT mock the module under test" in prompt
 
     def test_build_review_prompt(self, builder: PromptBuilder) -> None:
         """Should build a review prompt with spec content and file paths."""
@@ -279,3 +301,44 @@ class TestPromptBuilder:
         # Should include spec content in a code block
         assert "```spec" in prompt
         assert spec.full_content in prompt
+
+    def test_build_review_prompt_with_exports(self, builder: PromptBuilder) -> None:
+        """Should include export validation when exports are provided."""
+        spec = make_spec("student", "entities")
+        impl_path = Path("/output/entities/student.py")
+        test_path = Path("/output/entities/test_student.py")
+        original_exports = {"Student", "create_student", "find_student_by_id"}
+
+        prompt = builder.build_review_prompt(
+            spec=spec,
+            impl_path=impl_path,
+            test_path=test_path,
+            original_exports=original_exports,
+        )
+
+        # Should include export validation section
+        assert "EXPORT VALIDATION" in prompt
+        # Should list all exports
+        assert "Student" in prompt
+        assert "create_student" in prompt
+        assert "find_student_by_id" in prompt
+        # Should mention exports must match exactly
+        assert "EXACTLY" in prompt
+        # Should mention private names are allowed
+        assert "_" in prompt or "private" in prompt.lower()
+
+    def test_build_review_prompt_without_exports(self, builder: PromptBuilder) -> None:
+        """Should not include export validation when no exports provided."""
+        spec = make_spec("student", "entities")
+        impl_path = Path("/output/entities/student.py")
+        test_path = Path("/output/entities/test_student.py")
+
+        prompt = builder.build_review_prompt(
+            spec=spec,
+            impl_path=impl_path,
+            test_path=test_path,
+            original_exports=None,
+        )
+
+        # Should NOT include export validation section
+        assert "EXPORT VALIDATION" not in prompt

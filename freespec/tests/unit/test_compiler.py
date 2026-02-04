@@ -35,12 +35,7 @@ def make_config(tmp_path: Path) -> FreeSpecConfig:
         version="1.0",
         language="python",
         specs=["**/*.spec"],
-        output=OutputConfig(
-            headers="generated/headers/",
-            api="generated/api/",
-            impl="generated/src/",
-            tests="generated/tests/",
-        ),
+        output=OutputConfig(out="out/"),
         settings=SettingsConfig(),
         root_path=tmp_path,
     )
@@ -149,7 +144,7 @@ class TestIndependentCompiler:
         compiler = IndependentCompiler()
         path = compiler._get_impl_path(spec, config)
 
-        assert path == tmp_path / "generated/src/entities/student.py"
+        assert path == tmp_path / "out/entities/student.py"
 
     def test_get_impl_path_api(self, tmp_path: Path) -> None:
         """Should generate correct path for API implementations."""
@@ -159,7 +154,7 @@ class TestIndependentCompiler:
         compiler = IndependentCompiler()
         path = compiler._get_impl_path(spec, config)
 
-        assert path == tmp_path / "generated/api/auth.py"
+        assert path == tmp_path / "out/api/auth.py"
 
     def test_get_test_path(self, tmp_path: Path) -> None:
         """Should generate correct path for test files."""
@@ -169,7 +164,7 @@ class TestIndependentCompiler:
         compiler = IndependentCompiler()
         path = compiler._get_test_path(spec, config)
 
-        assert path == tmp_path / "generated/tests/entities/test_student.py"
+        assert path == tmp_path / "out/entities/test_student.py"
 
     def test_filter_headers_for_spec_with_mentions(self) -> None:
         """Should filter headers to only @mentioned ones."""
@@ -498,9 +493,9 @@ class TestIndependentCompiler:
             "entities/course": "class Course: pass",
         }
 
-        # Create the header file on disk
-        headers_dir = config.get_output_path("headers")
-        student_header = headers_dir / "entities" / "student.py"
+        # Create the header file on disk (now in out/ directory)
+        out_dir = config.get_output_path()
+        student_header = out_dir / "entities" / "student.py"
         student_header.parent.mkdir(parents=True, exist_ok=True)
         student_header.write_text("class Student: pass")
 
