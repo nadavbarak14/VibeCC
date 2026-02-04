@@ -118,7 +118,7 @@ def headers(config_path: Path | None, verbose: bool) -> None:
         context = generator.generate_all_headers(specs, config)
 
         click.echo(f"  Generated {len(context.generated_files)} header files")
-        click.echo(f"\nHeaders written to: {config.get_output_path('headers')}")
+        click.echo(f"\nHeaders written to: {config.get_src_path()}")
 
     except ConfigError as e:
         click.echo(f"Configuration error: {e}", err=True)
@@ -206,7 +206,7 @@ def impl(config_path: Path | None, no_verify: bool, verbose: bool) -> None:
             click.echo("\nVerifying imports...")
             verifier = ImportVerifier()
             impl_paths = [f.path for f in context.generated_files]
-            result = verifier.verify_cross_imports(impl_paths, config.get_output_path("impl"))
+            result = verifier.verify_cross_imports(impl_paths, config.get_src_path())
 
             if result.success:
                 click.echo("  All imports verified successfully")
@@ -217,7 +217,7 @@ def impl(config_path: Path | None, no_verify: bool, verbose: bool) -> None:
                     click.echo(f"    - {error.file_path}{line_info}: {error.error}", err=True)
                 sys.exit(1)
 
-        click.echo(f"\nImplementations written to: {config.get_output_path('impl')}")
+        click.echo(f"\nImplementations written to: {config.get_src_path()}")
 
     except ConfigError as e:
         click.echo(f"Configuration error: {e}", err=True)
@@ -307,7 +307,7 @@ def tests(config_path: Path | None, from_headers: bool, verbose: bool) -> None:
         context = generator.generate_all_tests(specs, config, source_code)
 
         click.echo(f"  Generated {len(context.generated_files)} test files")
-        click.echo(f"\nTests written to: {config.get_output_path('tests')}")
+        click.echo(f"\nTests written to: {config.get_tests_path()}")
 
     except ConfigError as e:
         click.echo(f"Configuration error: {e}", err=True)
@@ -331,28 +331,22 @@ def _load_implementations(config: FreeSpecConfig) -> dict[str, str]:
     """
     impls: dict[str, str] = {}
 
-    # Load from impl directory
-    impl_dir = config.get_output_path("impl")
-    if impl_dir.exists():
-        for py_file in impl_dir.rglob("*.py"):
+    # Load from src directory (implementations are in same place as headers)
+    src_dir = config.get_src_path()
+    if src_dir.exists():
+        for py_file in src_dir.rglob("*.py"):
             if py_file.name == "__init__.py":
                 continue
-            relative = py_file.relative_to(impl_dir)
+            # Skip test files
+            if py_file.name.startswith("test_"):
+                continue
+            relative = py_file.relative_to(src_dir)
             category = relative.parent.name if relative.parent.name else ""
             name = py_file.stem
             if category:
                 spec_id = f"{category}/{name}"
             else:
                 spec_id = name
-            impls[spec_id] = py_file.read_text()
-
-    # Load from api directory
-    api_dir = config.get_output_path("api")
-    if api_dir.exists():
-        for py_file in api_dir.rglob("*.py"):
-            if py_file.name == "__init__.py":
-                continue
-            spec_id = f"api/{py_file.stem}"
             impls[spec_id] = py_file.read_text()
 
     return impls
@@ -569,9 +563,8 @@ def compile(
 
         click.echo("\nCompilation complete!")
         click.echo("Output written to:")
-        click.echo(f"  Headers: {config.get_output_path('headers')}")
-        click.echo(f"  Implementations: {config.get_output_path('impl')}")
-        click.echo(f"  Tests: {config.get_output_path('tests')}")
+        click.echo(f"  Source: {config.get_src_path()}")
+        click.echo(f"  Tests: {config.get_tests_path()}")
         click.echo(f"  Logs: {log_dir}")
 
     except ConfigError as e:
