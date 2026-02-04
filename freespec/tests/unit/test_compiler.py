@@ -1,7 +1,7 @@
 """Unit tests for independent compiler."""
 
 from pathlib import Path
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock
 
 from freespec.config import FreeSpecConfig, OutputConfig, SettingsConfig
 from freespec.generator.compiler import (
@@ -510,7 +510,11 @@ class TestIndependentCompiler:
 
         # Second call (review) should use the session_id from first call
         second_call = mock_client.generate.call_args_list[1]
-        assert second_call[0][1] == "session-abc" or second_call[1].get("session_id") == "session-abc"
+        session_match = (
+            second_call[0][1] == "session-abc"
+            or second_call[1].get("session_id") == "session-abc"
+        )
+        assert session_match
 
     def test_compile_file_passes_header_paths(self, tmp_path: Path) -> None:
         """Should pass header file paths for @mentioned dependencies."""
