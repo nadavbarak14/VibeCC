@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import subprocess
+import sys
 import time
 import uuid
 from dataclasses import dataclass
@@ -44,6 +45,7 @@ class ClaudeCodeClient:
         timeout: int | None = None,
         working_dir: Path | str | None = None,
         log_dir: Path | str | None = None,
+        stream_output: bool = False,
     ) -> None:
         """Initialize the Claude Code client.
 
@@ -51,10 +53,12 @@ class ClaudeCodeClient:
             timeout: Optional timeout in seconds for CLI execution.
             working_dir: Working directory for CLI commands.
             log_dir: Directory to save compilation logs. If None, no logs saved.
+            stream_output: If True, print Claude output to stderr in real-time.
         """
         self.timeout = timeout
         self.working_dir = Path(working_dir) if working_dir else Path.cwd()
         self.log_dir = Path(log_dir) if log_dir else None
+        self.stream_output = stream_output
         self.log_callback: Callable[[str], None] | None = None
         self._current_spec_id: str | None = None
 
@@ -230,6 +234,9 @@ class ClaudeCodeClient:
                 for raw_line in process.stdout:
                     stripped_line = raw_line.rstrip("\n")
                     output_lines.append(stripped_line)
+
+                    if self.stream_output:
+                        print(stripped_line, file=sys.stderr)
 
                     if self.log_callback:
                         self.log_callback(stripped_line)

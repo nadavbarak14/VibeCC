@@ -483,7 +483,11 @@ def compile(
             log_dir = config.root_path / "logs" / "compile"
         click.echo(f"\nLogs will be saved to: {log_dir}")
 
-        client = ClaudeCodeClient(working_dir=config.root_path, log_dir=log_dir)
+        client = ClaudeCodeClient(
+            working_dir=config.root_path,
+            log_dir=log_dir,
+            stream_output=verbose,
+        )
         if not client.check_available():
             click.echo("  Error: Claude Code CLI not available", err=True)
             click.echo("  Please ensure 'claude' is installed and in PATH", err=True)
