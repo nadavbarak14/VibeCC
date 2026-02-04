@@ -154,8 +154,8 @@ class HeaderGenerator:
     def _get_header_path(self, spec: SpecFile, config: FreeSpecConfig) -> Path:
         """Determine output path for a spec's header file.
 
-        All output goes to the single out/ directory mirroring spec structure:
-        specs/entities/student.spec → out/entities/student.py
+        Headers go to out/src/ directory mirroring spec structure:
+        specs/entities/student.spec → out/src/entities/student.py
 
         Args:
             spec: The spec file.
@@ -164,7 +164,7 @@ class HeaderGenerator:
         Returns:
             Path where header file should be written.
         """
-        base = config.get_output_path()
+        base = config.get_src_path()
         ext = self._get_header_ext(config)
         return base / spec.category / f"{spec.name}{ext}"
 
@@ -193,7 +193,7 @@ class HeaderGenerator:
 
 
 def load_headers(config: FreeSpecConfig) -> dict[str, str]:
-    """Load all existing header files from the output directory.
+    """Load all existing header files from the src directory.
 
     Args:
         config: Project configuration.
@@ -201,13 +201,13 @@ def load_headers(config: FreeSpecConfig) -> dict[str, str]:
     Returns:
         Map of spec_id to header content.
     """
-    out_dir = config.get_output_path()
+    src_dir = config.get_src_path()
     headers: dict[str, str] = {}
 
-    if not out_dir.exists():
+    if not src_dir.exists():
         return headers
 
-    for py_file in out_dir.rglob("*.py"):
+    for py_file in src_dir.rglob("*.py"):
         if py_file.name == "__init__.py":
             continue
         # Skip test files
@@ -215,7 +215,7 @@ def load_headers(config: FreeSpecConfig) -> dict[str, str]:
             continue
 
         # Reconstruct spec_id from path
-        relative = py_file.relative_to(out_dir)
+        relative = py_file.relative_to(src_dir)
         category = relative.parent.name if relative.parent.name else ""
         name = py_file.stem
 

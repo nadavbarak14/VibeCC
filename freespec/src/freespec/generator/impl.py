@@ -171,8 +171,8 @@ class ImplementationGenerator:
     def _get_impl_path(self, spec: SpecFile, config: FreeSpecConfig) -> Path:
         """Determine output path for a spec's implementation file.
 
-        All output goes to the single out/ directory mirroring spec structure:
-        specs/entities/student.spec → out/entities/student.py
+        Implementations go to out/src/ directory (same location as headers):
+        specs/entities/student.spec → out/src/entities/student.py
 
         Args:
             spec: The spec file.
@@ -181,7 +181,7 @@ class ImplementationGenerator:
         Returns:
             Path where implementation file should be written.
         """
-        base = config.get_output_path()
+        base = config.get_src_path()
         return base / spec.category / f"{spec.name}.py"
 
     def _extract_code_from_output(self, output: str) -> str | None:
