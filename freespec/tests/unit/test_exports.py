@@ -172,8 +172,7 @@ class TestValidateExports:
         original = "class Student: pass\ndef create(): pass"
         current_path = tmp_path / "student.py"
         current_content = (
-            "class Student:\n    def __init__(self): pass\n\n"
-            "def create():\n    return Student()"
+            "class Student:\n    def __init__(self): pass\n\ndef create():\n    return Student()"
         )
         current_path.write_text(current_content)
 
