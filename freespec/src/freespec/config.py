@@ -15,12 +15,14 @@ class ConfigError(Exception):
 
 @dataclass
 class OutputConfig:
-    """Output directory configuration."""
+    """Output directory configuration.
 
-    headers: str = "generated/headers/"
-    api: str = "generated/api/"
-    impl: str = "generated/src/"
-    tests: str = "generated/tests/"
+    All generated files go to a single output directory that mirrors the spec structure:
+    - specs/entities/student.spec → out/entities/student.py
+    - specs/entities/student.spec → out/entities/test_student.py
+    """
+
+    out: str = "out/"
 
 
 @dataclass
@@ -64,10 +66,7 @@ class FreeSpecConfig:
 
         output_data = data.get("output", {})
         output = OutputConfig(
-            headers=output_data.get("headers", "generated/headers/"),
-            api=output_data.get("api", "generated/api/"),
-            impl=output_data.get("impl", "generated/src/"),
-            tests=output_data.get("tests", "generated/tests/"),
+            out=output_data.get("out", "out/"),
         )
 
         settings_data = data.get("settings", {})
@@ -86,27 +85,13 @@ class FreeSpecConfig:
             root_path=root_path,
         )
 
-    def get_output_path(self, category: str) -> Path:
-        """Get absolute output path for a category.
-
-        Args:
-            category: One of 'headers', 'api', 'impl', or 'tests'.
+    def get_output_path(self) -> Path:
+        """Get absolute output path.
 
         Returns:
             Absolute path to the output directory.
-
-        Raises:
-            ValueError: If category is invalid.
         """
-        paths = {
-            "headers": self.output.headers,
-            "api": self.output.api,
-            "impl": self.output.impl,
-            "tests": self.output.tests,
-        }
-        if category not in paths:
-            raise ValueError(f"Invalid category: {category}. Must be one of: {list(paths.keys())}")
-        return self.root_path / paths[category]
+        return self.root_path / self.output.out
 
 
 def load_config(config_path: Path | str) -> FreeSpecConfig:

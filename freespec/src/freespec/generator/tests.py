@@ -146,6 +146,9 @@ class SkeletonTestGenerator:
     def _get_test_path(self, spec: SpecFile, config: FreeSpecConfig) -> Path:
         """Determine output path for a spec's test file.
 
+        Tests go alongside implementation in the out/ directory:
+        specs/entities/student.spec → out/entities/test_student.py
+
         Args:
             spec: The spec file.
             config: Project configuration.
@@ -153,7 +156,7 @@ class SkeletonTestGenerator:
         Returns:
             Path where test file should be written.
         """
-        base = config.get_output_path("tests")
+        base = config.get_output_path()
         return base / spec.category / f"test_{spec.name}.py"
 
     def _extract_code_from_output(self, output: str) -> str | None:

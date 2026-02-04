@@ -17,6 +17,7 @@ from freespec.generator.prompts import PromptBuilder
 from freespec.generator.runner import PytestRunner
 from freespec.llm.claude_code import ClaudeCodeClient
 from freespec.parser.models import SpecFile
+from freespec.verifier.exports import extract_public_exports
 
 logger = logging.getLogger("freespec.generator.compiler")
 
@@ -105,19 +106,23 @@ class IndependentCompiler:
         return ".py"
 
     def _get_impl_path(self, spec: SpecFile, config: FreeSpecConfig) -> Path:
-        """Determine output path for a spec's implementation file."""
+        """Determine output path for a spec's implementation file.
+
+        All output goes to the single out/ directory mirroring spec structure:
+        specs/entities/student.spec → out/entities/student.py
+        """
         ext = self._get_file_ext(config)
-        if spec.category == "api":
-            base = config.get_output_path("api")
-            return base / f"{spec.name}{ext}"
-        else:
-            base = config.get_output_path("impl")
-            return base / spec.category / f"{spec.name}{ext}"
+        base = config.get_output_path()
+        return base / spec.category / f"{spec.name}{ext}"
 
     def _get_test_path(self, spec: SpecFile, config: FreeSpecConfig) -> Path:
-        """Determine output path for a spec's test file."""
+        """Determine output path for a spec's test file.
+
+        Tests go alongside implementation in the out/ directory:
+        specs/entities/student.spec → out/entities/test_student.py
+        """
         ext = self._get_file_ext(config)
-        base = config.get_output_path("tests")
+        base = config.get_output_path()
         return base / spec.category / f"test_{spec.name}{ext}"
 
     def _filter_headers_for_spec(
@@ -133,17 +138,20 @@ class IndependentCompiler:
         spec: SpecFile,
         config: FreeSpecConfig,
     ) -> dict[str, Path]:
-        """Get header file paths for @mentioned dependencies."""
+        """Get header file paths for @mentioned dependencies.
+
+        Headers (stub files) are in the same out/ directory structure.
+        """
         header_paths: dict[str, Path] = {}
-        headers_dir = config.get_output_path("headers")
+        out_dir = config.get_output_path()
         ext = self._get_header_ext(config)
 
         for mention in spec.mentions:
-            # Parse mention like "entities/student" -> entities/student.py or .hpp
+            # Parse mention like "entities/student" -> out/entities/student.py or .hpp
             parts = mention.split("/")
             if len(parts) == 2:
                 category, name = parts
-                header_path = headers_dir / category / f"{name}{ext}"
+                header_path = out_dir / category / f"{name}{ext}"
                 if header_path.exists():
                     header_paths[mention] = header_path
 
@@ -173,11 +181,12 @@ class IndependentCompiler:
         """Compile a single spec file with test verification and review.
 
         Flow:
-        1. Generate implementation and tests (Claude Code iterates internally)
-        2. Verify files exist
-        3. Run tests
-        4. If tests pass, run review to check spec fulfillment
-        5. If review fails, send feedback and retry (up to MAX_REVIEW_RETRIES)
+        1. Read original stub file and extract exports for validation
+        2. Generate implementation (in-place) and tests
+        3. Verify files exist
+        4. Run tests
+        5. If tests pass, run review (with export validation)
+        6. If review fails, send feedback and retry (up to MAX_REVIEW_RETRIES)
 
         Args:
             spec: The spec to compile.
@@ -192,6 +201,13 @@ class IndependentCompiler:
         # Create output directories
         impl_path.parent.mkdir(parents=True, exist_ok=True)
         test_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Read original stub content and extract exports for validation
+        original_exports: set[str] = set()
+        if impl_path.exists():
+            original_content = impl_path.read_text()
+            original_exports = extract_public_exports(original_content)
+            logger.debug("  Original exports: %s", sorted(original_exports))
 
         # Get header file paths for @mentioned dependencies
         header_paths = self._get_header_paths_for_spec(spec, context.config)
@@ -270,10 +286,15 @@ class IndependentCompiler:
                 last_log_file = result.log_file or last_log_file
                 continue
 
-            # Tests passed - now REVIEW
+            # Tests passed - now REVIEW with export validation
             logger.info("  Tests passed, running review...")
             review_attempts += 1
-            review_prompt = self.prompt_builder.build_review_prompt(spec, impl_path, test_path)
+            review_prompt = self.prompt_builder.build_review_prompt(
+                spec,
+                impl_path,
+                test_path,
+                original_exports=original_exports if original_exports else None,
+            )
             review_result = self.client.generate(review_prompt, session_id)
             total_duration += review_result.duration_seconds
             last_log_file = review_result.log_file or last_log_file

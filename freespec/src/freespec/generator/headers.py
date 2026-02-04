@@ -154,6 +154,9 @@ class HeaderGenerator:
     def _get_header_path(self, spec: SpecFile, config: FreeSpecConfig) -> Path:
         """Determine output path for a spec's header file.
 
+        All output goes to the single out/ directory mirroring spec structure:
+        specs/entities/student.spec → out/entities/student.py
+
         Args:
             spec: The spec file.
             config: Project configuration.
@@ -161,13 +164,9 @@ class HeaderGenerator:
         Returns:
             Path where header file should be written.
         """
-        base = config.get_output_path("headers")
+        base = config.get_output_path()
         ext = self._get_header_ext(config)
-
-        if spec.category == "api":
-            return base / "api" / f"{spec.name}{ext}"
-        else:
-            return base / spec.category / f"{spec.name}{ext}"
+        return base / spec.category / f"{spec.name}{ext}"
 
     def _extract_code_from_output(self, output: str) -> str | None:
         """Try to extract code from LLM output if file wasn't written.
@@ -194,7 +193,7 @@ class HeaderGenerator:
 
 
 def load_headers(config: FreeSpecConfig) -> dict[str, str]:
-    """Load all existing header files from the headers directory.
+    """Load all existing header files from the output directory.
 
     Args:
         config: Project configuration.
@@ -202,18 +201,21 @@ def load_headers(config: FreeSpecConfig) -> dict[str, str]:
     Returns:
         Map of spec_id to header content.
     """
-    headers_dir = config.get_output_path("headers")
+    out_dir = config.get_output_path()
     headers: dict[str, str] = {}
 
-    if not headers_dir.exists():
+    if not out_dir.exists():
         return headers
 
-    for py_file in headers_dir.rglob("*.py"):
+    for py_file in out_dir.rglob("*.py"):
         if py_file.name == "__init__.py":
+            continue
+        # Skip test files
+        if py_file.name.startswith("test_"):
             continue
 
         # Reconstruct spec_id from path
-        relative = py_file.relative_to(headers_dir)
+        relative = py_file.relative_to(out_dir)
         category = relative.parent.name if relative.parent.name else ""
         name = py_file.stem
 
