@@ -13,6 +13,10 @@ from pathlib import Path
 logger = logging.getLogger("freespec.generator.runner")
 
 
+class RunnerError(Exception):
+    """Raised when test infrastructure is broken (pytest not found, etc)."""
+
+
 @dataclass
 class RunResult:
     """Result of running tests on a single file."""
@@ -42,6 +46,35 @@ class PytestRunner:
         """
         self.working_dir = working_dir or Path.cwd()
         self.timeout = timeout
+
+    def check_available(self) -> bool:
+        """Check if pytest is available.
+
+        Returns:
+            True if pytest can be executed.
+
+        Raises:
+            RunnerError: If pytest is not available.
+        """
+        try:
+            result = subprocess.run(
+                ["python", "-m", "pytest", "--version"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                cwd=self.working_dir,
+            )
+            if result.returncode != 0:
+                raise RunnerError(
+                    f"pytest check failed: {result.stderr or result.stdout}"
+                )
+            return True
+        except FileNotFoundError:
+            raise RunnerError(
+                "Python not found. Ensure 'python' is in PATH."
+            )
+        except subprocess.TimeoutExpired:
+            raise RunnerError("pytest --version timed out")
 
     def run_test(self, test_path: Path) -> RunResult:
         """Run pytest on a single test file.
@@ -92,16 +125,10 @@ class PytestRunner:
                 returncode=-1,
             )
         except FileNotFoundError:
-            logger.error("pytest not found")
-            return RunResult(
-                success=False,
-                output="pytest not found. Please install pytest.",
-                returncode=-1,
+            logger.error("pytest/python not found")
+            raise RunnerError(
+                "Python or pytest not found. Ensure 'python' is in PATH and pytest is installed."
             )
         except Exception as e:
             logger.error("Failed to run tests: %s", e)
-            return RunResult(
-                success=False,
-                output=f"Failed to run tests: {e}",
-                returncode=-1,
-            )
+            raise RunnerError(f"Failed to run tests: {e}")

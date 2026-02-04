@@ -16,6 +16,7 @@ import click
 
 from freespec.config import ConfigError, FreeSpecConfig, find_config, load_config
 from freespec.generator.compiler import CompileError, IndependentCompiler
+from freespec.generator.runner import PytestRunner, RunnerError
 from freespec.generator.headers import HeaderGenerationError, HeaderGenerator, load_headers
 from freespec.generator.impl import ImplementationError, ImplementationGenerator
 from freespec.generator.stubs import GenerationError
@@ -487,6 +488,17 @@ def compile(
             click.echo("  Please ensure 'claude' is installed and in PATH", err=True)
             sys.exit(1)
 
+        # Check pytest availability for Python projects
+        if config.language.lower() == "python":
+            click.echo("\nChecking pytest availability...")
+            runner = PytestRunner(working_dir=config.root_path)
+            try:
+                runner.check_available()
+                click.echo("  pytest is available")
+            except RunnerError as e:
+                click.echo(f"  Error: {e}", err=True)
+                sys.exit(1)
+
         # Stage 2: Generate or load headers (Pass 1)
         if skip_headers:
             click.echo("\nStage 2: Loading existing headers...")
@@ -561,6 +573,9 @@ def compile(
         sys.exit(1)
     except GenerationError as e:
         click.echo(f"Generation error: {e}", err=True)
+        sys.exit(1)
+    except RunnerError as e:
+        click.echo(f"Test runner error: {e}", err=True)
         sys.exit(1)
 
 

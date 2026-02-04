@@ -3,7 +3,9 @@
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
-from freespec.generator.runner import PytestRunner, RunResult
+import pytest
+
+from freespec.generator.runner import PytestRunner, RunResult, RunnerError
 
 
 class TestRunResult:
@@ -112,18 +114,18 @@ class TestPytestRunner:
 
     @patch("freespec.generator.runner.subprocess.run")
     def test_run_test_pytest_not_found(self, mock_run: MagicMock, tmp_path: Path) -> None:
-        """Should return failure when pytest is not installed."""
+        """Should raise RunnerError when pytest is not installed."""
         test_file = tmp_path / "test_example.py"
         test_file.write_text("def test_pass(): assert True")
 
         mock_run.side_effect = FileNotFoundError("python not found")
 
         runner = PytestRunner(working_dir=tmp_path)
-        result = runner.run_test(test_file)
 
-        assert result.success is False
-        assert "not found" in result.output.lower()
-        assert result.returncode == -1
+        with pytest.raises(RunnerError) as exc_info:
+            runner.run_test(test_file)
+
+        assert "not found" in str(exc_info.value).lower()
 
     @patch("freespec.generator.runner.subprocess.run")
     def test_run_test_combines_stdout_stderr(self, mock_run: MagicMock, tmp_path: Path) -> None:
