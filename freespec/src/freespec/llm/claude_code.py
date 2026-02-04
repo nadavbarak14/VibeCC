@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 import subprocess
-import sys
 import time
 import uuid
 from dataclasses import dataclass
@@ -236,7 +235,7 @@ class ClaudeCodeClient:
                     output_lines.append(stripped_line)
 
                     if self.stream_output:
-                        print(stripped_line, file=sys.stderr)
+                        print(stripped_line, flush=True)
 
                     if self.log_callback:
                         self.log_callback(stripped_line)
