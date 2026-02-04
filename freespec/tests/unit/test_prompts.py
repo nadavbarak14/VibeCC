@@ -186,11 +186,11 @@ class TestPromptBuilder:
             language="python",
             impl_path=impl_path,
             test_path=test_path,
-            header_paths={},
+            dependency_paths={},
         )
 
-        # Should mention in-place compilation
-        assert "IN-PLACE COMPILATION" in prompt
+        # Should mention compilation
+        assert "COMPILE" in prompt
         # Should include both file paths
         assert str(impl_path) in prompt
         assert str(test_path) in prompt
@@ -204,13 +204,13 @@ class TestPromptBuilder:
         # Should mention reading existing stub
         assert "existing stub" in prompt.lower() or "read" in prompt.lower()
 
-    def test_build_compile_prompt_with_headers(self, builder: PromptBuilder) -> None:
-        """Should include header file paths in compile prompt."""
+    def test_build_compile_prompt_with_dependencies(self, builder: PromptBuilder) -> None:
+        """Should include dependency file paths in compile prompt."""
         spec = make_spec("enrollment", "services", mentions=["entities/student"])
-        impl_path = Path("/output/services/enrollment.py")
-        test_path = Path("/output/services/test_enrollment.py")
-        header_paths = {
-            "entities/student": Path("/output/entities/student.py"),
+        impl_path = Path("/output/src/services/enrollment.py")
+        test_path = Path("/output/tests/services/test_enrollment.py")
+        dependency_paths = {
+            "entities/student": Path("/output/src/entities/student.py"),
         }
 
         prompt = builder.build_compile_prompt(
@@ -218,45 +218,45 @@ class TestPromptBuilder:
             language="python",
             impl_path=impl_path,
             test_path=test_path,
-            header_paths=header_paths,
+            dependency_paths=dependency_paths,
         )
 
-        # Should include the header path
+        # Should include the dependency path
         assert "entities/student" in prompt
-        assert "/output/entities/student.py" in prompt
-        # Should instruct to READ the header files
+        assert "/output/src/entities/student.py" in prompt
+        # Should instruct to READ the dependencies
         assert "READ" in prompt
 
     def test_build_compile_prompt_no_dependencies(self, builder: PromptBuilder) -> None:
         """Should not include dependencies section when there are none."""
         spec = make_spec("student", "entities")
-        impl_path = Path("/output/entities/student.py")
-        test_path = Path("/output/entities/test_student.py")
+        impl_path = Path("/output/src/entities/student.py")
+        test_path = Path("/output/tests/entities/test_student.py")
 
         prompt = builder.build_compile_prompt(
             spec=spec,
             language="python",
             impl_path=impl_path,
             test_path=test_path,
-            header_paths={},
+            dependency_paths={},
         )
 
         # Should not have dependencies section when empty
-        assert "Dependencies (Header Files)" not in prompt
+        assert "## Dependencies" not in prompt
 
     def test_build_compile_prompt_mocking_external_only(self, builder: PromptBuilder) -> None:
         """Should instruct to mock only external dependencies."""
         spec = make_spec("enrollment", "services", mentions=["entities/student"])
-        impl_path = Path("/output/services/enrollment.py")
-        test_path = Path("/output/services/test_enrollment.py")
-        header_paths = {"entities/student": Path("/output/entities/student.py")}
+        impl_path = Path("/output/src/services/enrollment.py")
+        test_path = Path("/output/tests/services/test_enrollment.py")
+        dependency_paths = {"entities/student": Path("/output/src/entities/student.py")}
 
         prompt = builder.build_compile_prompt(
             spec=spec,
             language="python",
             impl_path=impl_path,
             test_path=test_path,
-            header_paths=header_paths,
+            dependency_paths=dependency_paths,
         )
 
         # Should mention mocking external dependencies only
