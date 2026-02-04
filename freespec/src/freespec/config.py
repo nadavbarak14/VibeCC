@@ -17,12 +17,16 @@ class ConfigError(Exception):
 class OutputConfig:
     """Output directory configuration.
 
-    All generated files go to a single output directory that mirrors the spec structure:
-    - specs/entities/student.spec → out/entities/student.py
-    - specs/entities/student.spec → out/entities/test_student.py
+    Generated files go to separate src/ and tests/ directories:
+    - specs/entities/student.spec → out/src/entities/student.py (header, then impl)
+    - specs/entities/student.spec → out/tests/entities/test_student.py
+
+    Tests import from src: `from src.entities.student import Student`
     """
 
     out: str = "out/"
+    src: str = "src/"
+    tests: str = "tests/"
 
 
 @dataclass
@@ -67,6 +71,8 @@ class FreeSpecConfig:
         output_data = data.get("output", {})
         output = OutputConfig(
             out=output_data.get("out", "out/"),
+            src=output_data.get("src", "src/"),
+            tests=output_data.get("tests", "tests/"),
         )
 
         settings_data = data.get("settings", {})
@@ -92,6 +98,22 @@ class FreeSpecConfig:
             Absolute path to the output directory.
         """
         return self.root_path / self.output.out
+
+    def get_src_path(self) -> Path:
+        """Get absolute path to src directory for headers/implementations.
+
+        Returns:
+            Absolute path to out/src/ directory.
+        """
+        return self.root_path / self.output.out / self.output.src
+
+    def get_tests_path(self) -> Path:
+        """Get absolute path to tests directory.
+
+        Returns:
+            Absolute path to out/tests/ directory.
+        """
+        return self.root_path / self.output.out / self.output.tests
 
 
 def load_config(config_path: Path | str) -> FreeSpecConfig:

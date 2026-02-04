@@ -628,7 +628,7 @@ class PromptBuilder:
                 "impl_requirements": "Use proper type hints throughout",
                 "test_requirements": (
                     "Import directly from the implementation file "
-                    "(e.g., from out.entities.student import Student)"
+                    "(e.g., from src.entities.student import Student)"
                 ),
                 "no_skip_instruction": "no @pytest.mark.skip or pending markers",
                 "header_ext": ".py",

@@ -134,21 +134,21 @@ class IndependentCompiler:
     def _get_impl_path(self, spec: SpecFile, config: FreeSpecConfig) -> Path:
         """Determine output path for a spec's implementation file.
 
-        All output goes to the single out/ directory mirroring spec structure:
-        specs/entities/student.spec → out/entities/student.py
+        Headers and implementations go to out/src/:
+        specs/entities/student.spec → out/src/entities/student.py
         """
         ext = self._get_file_ext(config)
-        base = config.get_output_path()
+        base = config.get_src_path()
         return base / spec.category / f"{spec.name}{ext}"
 
     def _get_test_path(self, spec: SpecFile, config: FreeSpecConfig) -> Path:
         """Determine output path for a spec's test file.
 
-        Tests go alongside implementation in the out/ directory:
-        specs/entities/student.spec → out/entities/test_student.py
+        Tests go to out/tests/:
+        specs/entities/student.spec → out/tests/entities/test_student.py
         """
         ext = self._get_file_ext(config)
-        base = config.get_output_path()
+        base = config.get_tests_path()
         return base / spec.category / f"test_{spec.name}{ext}"
 
     def _filter_headers_for_spec(
@@ -166,18 +166,18 @@ class IndependentCompiler:
     ) -> dict[str, Path]:
         """Get header file paths for @mentioned dependencies.
 
-        Headers (stub files) are in the same out/ directory structure.
+        Headers (stub files) are in the out/src/ directory structure.
         """
         header_paths: dict[str, Path] = {}
-        out_dir = config.get_output_path()
+        src_dir = config.get_src_path()
         ext = self._get_header_ext(config)
 
         for mention in spec.mentions:
-            # Parse mention like "entities/student" -> out/entities/student.py or .hpp
+            # Parse mention like "entities/student" -> out/src/entities/student.py or .hpp
             parts = mention.split("/")
             if len(parts) == 2:
                 category, name = parts
-                header_path = out_dir / category / f"{name}{ext}"
+                header_path = src_dir / category / f"{name}{ext}"
                 if header_path.exists():
                     header_paths[mention] = header_path
 

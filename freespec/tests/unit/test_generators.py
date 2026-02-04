@@ -66,7 +66,7 @@ class TestHeaderGenerator:
         generator = HeaderGenerator(client=mock_client)
 
         # Create the expected output path and write mock content
-        output_path = tmp_path / "out/entities/student.py"
+        output_path = tmp_path / "out/src/entities/student.py"
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text("# Generated header\nclass Student:\n    pass")
 
@@ -92,7 +92,7 @@ class TestHeaderGenerator:
         generator = HeaderGenerator(client=mock_client)
 
         # Create the directory but not the file
-        output_dir = tmp_path / "generated/headers/entities"
+        output_dir = tmp_path / "out/src/entities"
         output_dir.mkdir(parents=True, exist_ok=True)
 
         header = generator.generate_header(spec, config)
@@ -148,7 +148,7 @@ class TestHeaderGenerator:
         generator = HeaderGenerator()
         path = generator._get_header_path(spec, config)
 
-        assert path == tmp_path / "out/entities/student.py"
+        assert path == tmp_path / "out/src/entities/student.py"
 
     def test_get_header_path_api(self, tmp_path: Path) -> None:
         """Should generate correct path for api specs."""
@@ -158,7 +158,7 @@ class TestHeaderGenerator:
         generator = HeaderGenerator()
         path = generator._get_header_path(spec, config)
 
-        assert path == tmp_path / "out/api/auth.py"
+        assert path == tmp_path / "out/src/api/auth.py"
 
 
 class TestImplementationGenerator:
@@ -181,7 +181,7 @@ class TestImplementationGenerator:
         context = ImplContext(config=config, all_headers=all_headers)
 
         # Create the expected output path and write mock content
-        output_path = tmp_path / "out/entities/student.py"
+        output_path = tmp_path / "out/src/entities/student.py"
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text("# Implementation\nclass Student:\n    pass")
 
@@ -213,7 +213,7 @@ class TestImplementationGenerator:
         generator = ImplementationGenerator(client=mock_client, prompt_builder=mock_builder)
         context = ImplContext(config=config, all_headers=all_headers)
 
-        output_dir = tmp_path / "out/services"
+        output_dir = tmp_path / "out/src/services"
         output_dir.mkdir(parents=True, exist_ok=True)
 
         generator.generate_impl(spec, context)
@@ -231,7 +231,7 @@ class TestImplementationGenerator:
         generator = ImplementationGenerator()
         path = generator._get_impl_path(spec, config)
 
-        assert path == tmp_path / "out/entities/student.py"
+        assert path == tmp_path / "out/src/entities/student.py"
 
     def test_get_impl_path_api(self, tmp_path: Path) -> None:
         """Should generate correct path for api implementations."""
@@ -241,7 +241,7 @@ class TestImplementationGenerator:
         generator = ImplementationGenerator()
         path = generator._get_impl_path(spec, config)
 
-        assert path == tmp_path / "out/api/auth.py"
+        assert path == tmp_path / "out/src/api/auth.py"
 
 
 class TestSkeletonTestGenerator:
@@ -263,7 +263,7 @@ class TestSkeletonTestGenerator:
         generator = SkeletonTestGenerator(client=mock_client)
 
         # Create the expected output path and write mock content
-        output_path = tmp_path / "out/entities/test_student.py"
+        output_path = tmp_path / "out/tests/entities/test_student.py"
         output_path.parent.mkdir(parents=True, exist_ok=True)
         output_path.write_text("import pytest\ndef test_student(): pass")
 
@@ -302,7 +302,7 @@ class TestSkeletonTestGenerator:
         generator = SkeletonTestGenerator()
         path = generator._get_test_path(spec, config)
 
-        assert path == tmp_path / "out/entities/test_student.py"
+        assert path == tmp_path / "out/tests/entities/test_student.py"
 
 
 class TestLoadHeaders:
@@ -320,11 +320,11 @@ class TestLoadHeaders:
         """Should load all header files."""
         config = make_config(tmp_path)
 
-        # Create header files in the out/ directory
-        out_dir = tmp_path / "out"
-        (out_dir / "entities").mkdir(parents=True)
-        (out_dir / "entities/student.py").write_text("class Student: pass")
-        (out_dir / "entities/course.py").write_text("class Course: pass")
+        # Create header files in the out/src/ directory
+        src_dir = tmp_path / "out/src"
+        (src_dir / "entities").mkdir(parents=True)
+        (src_dir / "entities/student.py").write_text("class Student: pass")
+        (src_dir / "entities/course.py").write_text("class Course: pass")
 
         headers = load_headers(config)
 
@@ -337,11 +337,11 @@ class TestLoadHeaders:
         """Should ignore __init__.py files."""
         config = make_config(tmp_path)
 
-        # Create header files in the out/ directory
-        out_dir = tmp_path / "out"
-        (out_dir / "entities").mkdir(parents=True)
-        (out_dir / "entities/__init__.py").write_text("")
-        (out_dir / "entities/student.py").write_text("class Student: pass")
+        # Create header files in the out/src/ directory
+        src_dir = tmp_path / "out/src"
+        (src_dir / "entities").mkdir(parents=True)
+        (src_dir / "entities/__init__.py").write_text("")
+        (src_dir / "entities/student.py").write_text("class Student: pass")
 
         headers = load_headers(config)
 
