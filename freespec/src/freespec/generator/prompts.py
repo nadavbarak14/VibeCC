@@ -64,6 +64,9 @@ class PromptBuilder:
         Returns:
             Complete prompt for the LLM.
         """
+        lang_info = self._get_language_info(language)
+        lang = language.lower()
+
         prompt_parts = [
             "Generate a HEADER/INTERFACE file from this FreeSpec specification.",
             "",
@@ -77,14 +80,34 @@ class PromptBuilder:
             f"Generate a {language.upper()} header/interface file.",
             "This is an INTERFACE only - defines the public API, not implementation.",
             "",
-            "Requirements:",
-            "- Each export becomes a function or method that can be imported and called",
-            "- For entities: Create a dataclass with fields and CRUD methods",
-            "- For services: Create a class with method signatures matching exports",
-            "- All methods must raise NotImplementedError() - no real implementation",
-            "- Include complete type hints for all parameters and return types",
-            "- Do NOT import from other generated modules (standalone interface)",
-            "- Use standard library types only (datetime, uuid, typing, etc.)",
+        ]
+
+        if lang in ("cpp", "c++"):
+            prompt_parts.extend([
+                "Requirements:",
+                "- Generate a .hpp header file with proper include guards",
+                "- Each export becomes a function or method declaration",
+                "- For entities: Create a class with fields and method declarations",
+                "- For services: Create a class with pure virtual methods or function declarations",
+                "- NO implementation in the header (declarations only)",
+                "- Use modern C++ (C++17), std::string, std::optional, std::vector",
+                "- Use smart pointers (std::unique_ptr, std::shared_ptr) where appropriate",
+                "- Include necessary standard headers (#include <string>, etc.)",
+                "- Use a namespace matching the category (e.g., namespace entities { })",
+            ])
+        else:  # Python
+            prompt_parts.extend([
+                "Requirements:",
+                "- Each export becomes a function or method that can be imported and called",
+                "- For entities: Create a dataclass with fields and CRUD methods",
+                "- For services: Create a class with method signatures matching exports",
+                "- All methods must raise NotImplementedError() - no real implementation",
+                "- Include complete type hints for all parameters and return types",
+                "- Do NOT import from other generated modules (standalone interface)",
+                "- Use standard library types only (datetime, uuid, typing, etc.)",
+            ])
+
+        prompt_parts.extend([
             "",
             "## Spec File",
             "",
@@ -96,7 +119,7 @@ class PromptBuilder:
             "```",
             "",
             f"Write the generated code to: `{output_path}`",
-        ]
+        ])
 
         return "\n".join(prompt_parts)
 
@@ -355,13 +378,16 @@ class PromptBuilder:
         Returns:
             Complete prompt for the LLM.
         """
+        # Get language-specific instructions
+        lang_info = self._get_language_info(language)
+
         prompt_parts = [
             "INDEPENDENT COMPILATION of a FreeSpec specification.",
             "",
             "## Task",
             "",
             f"Generate BOTH the {language.upper()} implementation AND complete, passing tests.",
-            "Run the tests with pytest and iterate until they pass.",
+            f"Run the tests with {lang_info['test_runner']} and iterate until they pass.",
             "",
             "## Dependencies (Header Files)",
             "",
@@ -385,7 +411,7 @@ class PromptBuilder:
                     "- Method signatures and return types",
                     "- How to properly instantiate and use these classes",
                     "",
-                    "In your tests, mock these dependencies using unittest.mock.",
+                    f"In your tests, {lang_info['mock_instruction']}",
                     "",
                 ]
             )
@@ -411,9 +437,9 @@ class PromptBuilder:
                 "## Understanding the Spec Format",
                 "",
                 "### exports: = The Public API",
-                "Each line in `exports:` is something that CAN BE IMPORTED AND CALLED.",
+                "Each line in `exports:` is something that CAN BE CALLED.",
                 "These become the public functions/methods of your implementation.",
-                "Example: 'Create a new student' → `create_student()` or `Student.create()`",
+                f"Example: 'Create a new student' → {lang_info['example_function']}",
                 "",
                 "### tests: = Test Cases",
                 "Each line describes a test that must pass. Implement tests that verify these.",
@@ -427,15 +453,14 @@ class PromptBuilder:
                 "",
                 "### Implementation",
                 "- Each export becomes a callable function or method",
-                "- The implementation must expose ALL exports as importable API",
-                "- Import dependencies from the header files listed above (if any)",
-                "- Use proper type hints",
+                f"- {lang_info['impl_requirements']}",
+                "- Include dependencies from the header files listed above (if any)",
                 "",
                 "### Tests",
-                "- Import and USE the implementation's public API (the exports)",
+                f"- {lang_info['test_requirements']}",
                 "- Write COMPLETE tests that actually verify the implementation",
-                "- Mock ALL external dependencies using unittest.mock",
-                "- Tests must PASS - no @pytest.mark.skip or pending markers",
+                f"- {lang_info['mock_instruction']}",
+                f"- Tests must PASS - {lang_info['no_skip_instruction']}",
                 "- Test the behavior described in the spec's tests section",
                 "",
                 "## Instructions",
@@ -443,13 +468,51 @@ class PromptBuilder:
                 "1. If there are dependencies, READ the header files first to understand the APIs",
                 "2. Read the spec - understand what exports need to be implemented",
                 "3. Write the implementation exposing all exports as callable API",
-                "4. Write tests that import and call the implementation's API",
-                "5. Ensure tests would pass when run with pytest",
+                "4. Write tests that call the implementation's API",
+                f"5. Run tests with {lang_info['test_command']} and iterate until they pass",
                 "6. Write BOTH files to the specified paths",
             ]
         )
 
         return "\n".join(prompt_parts)
+
+    def _get_language_info(self, language: str) -> dict[str, str]:
+        """Get language-specific prompt information.
+
+        Args:
+            language: Target programming language.
+
+        Returns:
+            Dictionary with language-specific instructions.
+        """
+        lang = language.lower()
+
+        if lang in ("cpp", "c++"):
+            return {
+                "test_runner": "the compiled test executable",
+                "test_command": "g++ to compile, then run the executable",
+                "mock_instruction": "use dependency injection or test doubles for mocking",
+                "example_function": "`create_student()` or `Student::create()`",
+                "impl_requirements": "Use modern C++ (C++17 or later), proper RAII, and smart pointers",
+                "test_requirements": "Use Catch2 (single-header) for testing. Include catch.hpp and use TEST_CASE/REQUIRE macros",
+                "no_skip_instruction": "no SKIP or disabled tests",
+                "header_ext": ".hpp",
+                "impl_ext": ".cpp",
+                "test_ext": "_test.cpp",
+            }
+        else:  # Default to Python
+            return {
+                "test_runner": "pytest",
+                "test_command": "pytest",
+                "mock_instruction": "mock external dependencies using unittest.mock",
+                "example_function": "`create_student()` or `Student.create()`",
+                "impl_requirements": "Use proper type hints throughout",
+                "test_requirements": "Import and USE the implementation's public API (the exports)",
+                "no_skip_instruction": "no @pytest.mark.skip or pending markers",
+                "header_ext": ".py",
+                "impl_ext": ".py",
+                "test_ext": ".py",
+            }
 
     def _format_dependency_code(self, dependency_code: dict[str, str] | None) -> str:
         """Format dependency code for inclusion in prompt.

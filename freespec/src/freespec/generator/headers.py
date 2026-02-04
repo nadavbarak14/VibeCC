@@ -144,6 +144,13 @@ class HeaderGenerator:
 
         return context
 
+    def _get_header_ext(self, config: FreeSpecConfig) -> str:
+        """Get header file extension for the target language."""
+        lang = config.language.lower()
+        if lang in ("cpp", "c++"):
+            return ".hpp"
+        return ".py"
+
     def _get_header_path(self, spec: SpecFile, config: FreeSpecConfig) -> Path:
         """Determine output path for a spec's header file.
 
@@ -155,11 +162,12 @@ class HeaderGenerator:
             Path where header file should be written.
         """
         base = config.get_output_path("headers")
+        ext = self._get_header_ext(config)
 
         if spec.category == "api":
-            return base / "api" / f"{spec.name}.py"
+            return base / "api" / f"{spec.name}{ext}"
         else:
-            return base / spec.category / f"{spec.name}.py"
+            return base / spec.category / f"{spec.name}{ext}"
 
     def _extract_code_from_output(self, output: str) -> str | None:
         """Try to extract code from LLM output if file wasn't written.

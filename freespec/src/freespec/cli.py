@@ -16,6 +16,7 @@ import click
 
 from freespec.config import ConfigError, FreeSpecConfig, find_config, load_config
 from freespec.generator.compiler import CompileError, IndependentCompiler
+from freespec.generator.cpp_runner import CppRunnerError, CppTestRunner
 from freespec.generator.runner import PytestRunner, RunnerError
 from freespec.generator.headers import HeaderGenerationError, HeaderGenerator, load_headers
 from freespec.generator.impl import ImplementationError, ImplementationGenerator
@@ -488,14 +489,24 @@ def compile(
             click.echo("  Please ensure 'claude' is installed and in PATH", err=True)
             sys.exit(1)
 
-        # Check pytest availability for Python projects
-        if config.language.lower() == "python":
+        # Check test runner availability based on language
+        lang = config.language.lower()
+        if lang == "python":
             click.echo("\nChecking pytest availability...")
             runner = PytestRunner(working_dir=config.root_path)
             try:
                 runner.check_available()
                 click.echo("  pytest is available")
             except RunnerError as e:
+                click.echo(f"  Error: {e}", err=True)
+                sys.exit(1)
+        elif lang in ("cpp", "c++"):
+            click.echo("\nChecking C++ compiler availability...")
+            cpp_runner = CppTestRunner(working_dir=config.root_path)
+            try:
+                cpp_runner.check_available()
+                click.echo("  C++ compiler is available")
+            except CppRunnerError as e:
                 click.echo(f"  Error: {e}", err=True)
                 sys.exit(1)
 
@@ -576,6 +587,9 @@ def compile(
         sys.exit(1)
     except RunnerError as e:
         click.echo(f"Test runner error: {e}", err=True)
+        sys.exit(1)
+    except CppRunnerError as e:
+        click.echo(f"C++ runner error: {e}", err=True)
         sys.exit(1)
 
 

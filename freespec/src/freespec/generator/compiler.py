@@ -85,19 +85,35 @@ class IndependentCompiler:
         self.prompt_builder = prompt_builder or PromptBuilder()
         self.test_runner = test_runner
 
+    def _get_file_ext(self, config: FreeSpecConfig) -> str:
+        """Get file extension for the target language."""
+        lang = config.language.lower()
+        if lang in ("cpp", "c++"):
+            return ".cpp"
+        return ".py"
+
+    def _get_header_ext(self, config: FreeSpecConfig) -> str:
+        """Get header file extension for the target language."""
+        lang = config.language.lower()
+        if lang in ("cpp", "c++"):
+            return ".hpp"
+        return ".py"
+
     def _get_impl_path(self, spec: SpecFile, config: FreeSpecConfig) -> Path:
         """Determine output path for a spec's implementation file."""
+        ext = self._get_file_ext(config)
         if spec.category == "api":
             base = config.get_output_path("api")
-            return base / f"{spec.name}.py"
+            return base / f"{spec.name}{ext}"
         else:
             base = config.get_output_path("impl")
-            return base / spec.category / f"{spec.name}.py"
+            return base / spec.category / f"{spec.name}{ext}"
 
     def _get_test_path(self, spec: SpecFile, config: FreeSpecConfig) -> Path:
         """Determine output path for a spec's test file."""
+        ext = self._get_file_ext(config)
         base = config.get_output_path("tests")
-        return base / spec.category / f"test_{spec.name}.py"
+        return base / spec.category / f"test_{spec.name}{ext}"
 
     def _filter_headers_for_spec(
         self,
@@ -115,13 +131,14 @@ class IndependentCompiler:
         """Get header file paths for @mentioned dependencies."""
         header_paths: dict[str, Path] = {}
         headers_dir = config.get_output_path("headers")
+        ext = self._get_header_ext(config)
 
         for mention in spec.mentions:
-            # Parse mention like "entities/student" -> entities/student.py
+            # Parse mention like "entities/student" -> entities/student.py or .hpp
             parts = mention.split("/")
             if len(parts) == 2:
                 category, name = parts
-                header_path = headers_dir / category / f"{name}.py"
+                header_path = headers_dir / category / f"{name}{ext}"
                 if header_path.exists():
                     header_paths[mention] = header_path
 
