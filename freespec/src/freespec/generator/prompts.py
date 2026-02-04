@@ -88,7 +88,7 @@ class PromptBuilder:
                     "- Generate a .hpp header file with proper include guards",
                     "- Each export becomes a function or method declaration",
                     "- For entities: Create a class with fields and method declarations",
-                    "- For services: Create a class with pure virtual methods or function declarations",
+                    "- For services: Create a class with pure virtual methods",
                     "- NO implementation in the header (declarations only)",
                     "- Use modern C++ (C++17), std::string, std::optional, std::vector",
                     "- Use smart pointers (std::unique_ptr, std::shared_ptr) where appropriate",
