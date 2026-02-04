@@ -82,6 +82,9 @@ class HeaderGenerator:
         output_path = self._get_header_path(spec, config)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
+        # Set current spec for logging
+        self.client.set_current_spec(f"header_{spec.spec_id}")
+
         prompt = self.prompt_builder.build_header_prompt(
             spec=spec,
             language=config.language,

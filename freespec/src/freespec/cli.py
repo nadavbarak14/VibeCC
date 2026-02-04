@@ -385,12 +385,26 @@ def _load_implementations(config: FreeSpecConfig) -> dict[str, str]:
     is_flag=True,
     help="Skip header generation, use existing headers",
 )
+@click.option(
+    "--file",
+    "spec_file",
+    type=click.Path(exists=True, path_type=Path),
+    help="Compile only this specific .spec file",
+)
+@click.option(
+    "--log-dir",
+    "log_dir",
+    type=click.Path(path_type=Path),
+    help="Directory to save detailed compilation logs",
+)
 def compile(
     config_path: Path | None,
     fail_fast: bool,
     verbose: bool,
     dry_run: bool,
     skip_headers: bool,
+    spec_file: Path | None,
+    log_dir: Path | None,
 ) -> None:
     """Compile .spec files using independent compilation (gcc model).
 
@@ -429,6 +443,18 @@ def compile(
 
         click.echo(f"  Total: {len(specs)} spec files")
 
+        # Filter to single file if --file specified
+        if spec_file:
+            spec_file = spec_file.resolve()
+            matching = [s for s in specs if s.path.resolve() == spec_file]
+            if not matching:
+                click.echo(f"  Error: {spec_file} not found in configured specs", err=True)
+                sys.exit(1)
+            click.echo(f"  Filtering to single file: {spec_file.name}")
+            compile_specs = matching
+        else:
+            compile_specs = specs
+
         # Validate dependencies (allow cycles)
         click.echo("\nValidating dependencies...")
         resolver = DependencyResolver()
@@ -450,7 +476,12 @@ def compile(
             return
 
         # Check Claude Code availability
-        client = ClaudeCodeClient(working_dir=config.root_path)
+        # Use default log dir if not specified
+        if log_dir is None:
+            log_dir = config.root_path / "logs" / "compile"
+        click.echo(f"\nLogs will be saved to: {log_dir}")
+
+        client = ClaudeCodeClient(working_dir=config.root_path, log_dir=log_dir)
         if not client.check_available():
             click.echo("  Error: Claude Code CLI not available", err=True)
             click.echo("  Please ensure 'claude' is installed and in PATH", err=True)
@@ -473,9 +504,10 @@ def compile(
 
         # Stage 3: Independent compilation (Pass 2)
         click.echo("\nStage 3: Independent compilation...")
+        click.echo(f"  Compiling {len(compile_specs)} spec(s)...")
         compiler = IndependentCompiler(client=client)
         compile_context = compiler.compile_all(
-            specs=specs,
+            specs=compile_specs,
             config=config,
             all_headers=all_headers,
             fail_fast=fail_fast,
@@ -485,7 +517,10 @@ def compile(
         click.echo("\nCompilation Results:")
         for result in compile_context.results:
             status = "[PASS]" if result.success else "[FAIL]"
-            click.echo(f"  {status} {result.spec_id}")
+            duration = f"({result.duration_seconds:.1f}s)" if result.duration_seconds else ""
+            click.echo(f"  {status} {result.spec_id} {duration}")
+            if result.log_file:
+                click.echo(f"       Log: {result.log_file}")
 
         # Summary
         passed = len(compile_context.passed)
@@ -510,6 +545,7 @@ def compile(
         click.echo(f"  Headers: {config.get_output_path('headers')}")
         click.echo(f"  Implementations: {config.get_output_path('impl')}")
         click.echo(f"  Tests: {config.get_output_path('tests')}")
+        click.echo(f"  Logs: {log_dir}")
 
     except ConfigError as e:
         click.echo(f"Configuration error: {e}", err=True)

@@ -34,6 +34,8 @@ class CompileResult:
     impl_path: Path | None = None
     test_path: Path | None = None
     error: str | None = None
+    duration_seconds: float = 0.0
+    log_file: Path | None = None
 
 
 @dataclass
@@ -174,6 +176,9 @@ class IndependentCompiler:
             list(header_paths.keys()) or "none",
         )
 
+        # Set current spec for logging
+        self.client.set_current_spec(spec.spec_id)
+
         # Generate impl + tests - Claude Code will iterate until tests pass
         prompt = self.prompt_builder.build_compile_prompt(
             spec=spec,
@@ -193,6 +198,8 @@ class IndependentCompiler:
                 impl_path=impl_path,
                 test_path=test_path,
                 error=f"Generation failed: {result.error}",
+                duration_seconds=result.duration_seconds,
+                log_file=result.log_file,
             )
             context.results.append(compile_result)
             return compile_result
@@ -206,6 +213,8 @@ class IndependentCompiler:
                 impl_path=impl_path,
                 test_path=test_path,
                 error="Implementation or test file not written",
+                duration_seconds=result.duration_seconds,
+                log_file=result.log_file,
             )
             context.results.append(compile_result)
             return compile_result
@@ -221,6 +230,8 @@ class IndependentCompiler:
                 success=True,
                 impl_path=impl_path,
                 test_path=test_path,
+                duration_seconds=result.duration_seconds,
+                log_file=result.log_file,
             )
         else:
             logger.warning("  Tests failed")
@@ -230,6 +241,8 @@ class IndependentCompiler:
                 impl_path=impl_path,
                 test_path=test_path,
                 error=f"Tests failed:\n{test_result.output}",
+                duration_seconds=result.duration_seconds,
+                log_file=result.log_file,
             )
 
         context.results.append(compile_result)
