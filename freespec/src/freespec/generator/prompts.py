@@ -567,9 +567,7 @@ class PromptBuilder:
         )
 
         if original_exports:
-            prompt_parts.append(
-                "6. Verify that public exports match the original stub exactly"
-            )
+            prompt_parts.append("6. Verify that public exports match the original stub exactly")
 
         prompt_parts.extend(
             [
