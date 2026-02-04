@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 from datetime import datetime  # noqa: TC003 - used at runtime for SQLAlchemy
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 from sqlalchemy import (
@@ -24,7 +24,7 @@ from sqlalchemy.orm import (
 )
 
 
-class PipelineState(str, Enum):
+class PipelineState(StrEnum):
     """Pipeline state enum."""
 
     QUEUED = "queued"

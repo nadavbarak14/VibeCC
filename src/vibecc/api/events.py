@@ -6,12 +6,12 @@ import asyncio
 import json
 from dataclasses import dataclass, field
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 from uuid import uuid4
 
 
-class EventType(str, Enum):
+class EventType(StrEnum):
     """Types of events that can be emitted."""
 
     PIPELINE_CREATED = "pipeline_created"

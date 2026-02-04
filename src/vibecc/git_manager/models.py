@@ -1,10 +1,10 @@
 """Data models for Git Manager."""
 
 from dataclasses import dataclass
-from enum import Enum
+from enum import StrEnum
 
 
-class CIStatus(str, Enum):
+class CIStatus(StrEnum):
     """CI check status."""
 
     PENDING = "pending"
