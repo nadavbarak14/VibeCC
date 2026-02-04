@@ -65,14 +65,10 @@ class PytestRunner:
                 cwd=self.working_dir,
             )
             if result.returncode != 0:
-                raise RunnerError(
-                    f"pytest check failed: {result.stderr or result.stdout}"
-                )
+                raise RunnerError(f"pytest check failed: {result.stderr or result.stdout}")
             return True
         except FileNotFoundError:
-            raise RunnerError(
-                "Python not found. Ensure 'python' is in PATH."
-            )
+            raise RunnerError("Python not found. Ensure 'python' is in PATH.")
         except subprocess.TimeoutExpired:
             raise RunnerError("pytest --version timed out")
 

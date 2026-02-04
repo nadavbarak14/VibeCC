@@ -82,43 +82,49 @@ class PromptBuilder:
         ]
 
         if lang in ("cpp", "c++"):
-            prompt_parts.extend([
-                "Requirements:",
-                "- Generate a .hpp header file with proper include guards",
-                "- Each export becomes a function or method declaration",
-                "- For entities: Create a class with fields and method declarations",
-                "- For services: Create a class with pure virtual methods or function declarations",
-                "- NO implementation in the header (declarations only)",
-                "- Use modern C++ (C++17), std::string, std::optional, std::vector",
-                "- Use smart pointers (std::unique_ptr, std::shared_ptr) where appropriate",
-                "- Include necessary standard headers (#include <string>, etc.)",
-                "- Use a namespace matching the category (e.g., namespace entities { })",
-            ])
+            prompt_parts.extend(
+                [
+                    "Requirements:",
+                    "- Generate a .hpp header file with proper include guards",
+                    "- Each export becomes a function or method declaration",
+                    "- For entities: Create a class with fields and method declarations",
+                    "- For services: Create a class with pure virtual methods or function declarations",
+                    "- NO implementation in the header (declarations only)",
+                    "- Use modern C++ (C++17), std::string, std::optional, std::vector",
+                    "- Use smart pointers (std::unique_ptr, std::shared_ptr) where appropriate",
+                    "- Include necessary standard headers (#include <string>, etc.)",
+                    "- Use a namespace matching the category (e.g., namespace entities { })",
+                ]
+            )
         else:  # Python
-            prompt_parts.extend([
-                "Requirements:",
-                "- Each export becomes a function or method that can be imported and called",
-                "- For entities: Create a dataclass with fields and CRUD methods",
-                "- For services: Create a class with method signatures matching exports",
-                "- All methods must raise NotImplementedError() - no real implementation",
-                "- Include complete type hints for all parameters and return types",
-                "- Do NOT import from other generated modules (standalone interface)",
-                "- Use standard library types only (datetime, uuid, typing, etc.)",
-            ])
+            prompt_parts.extend(
+                [
+                    "Requirements:",
+                    "- Each export becomes a function or method that can be imported and called",
+                    "- For entities: Create a dataclass with fields and CRUD methods",
+                    "- For services: Create a class with method signatures matching exports",
+                    "- All methods must raise NotImplementedError() - no real implementation",
+                    "- Include complete type hints for all parameters and return types",
+                    "- Do NOT import from other generated modules (standalone interface)",
+                    "- Use standard library types only (datetime, uuid, typing, etc.)",
+                ]
+            )
 
-        prompt_parts.extend([
-            "",
-            "## Spec File",
-            "",
-            f"Category: {spec.category}",
-            f"Name: {spec.name}",
-            "",
-            "```",
-            spec.full_content,
-            "```",
-            "",
-            f"Write the generated code to: `{output_path}`",
-        ])
+        prompt_parts.extend(
+            [
+                "",
+                "## Spec File",
+                "",
+                f"Category: {spec.category}",
+                f"Name: {spec.name}",
+                "",
+                "```",
+                spec.full_content,
+                "```",
+                "",
+                f"Write the generated code to: `{output_path}`",
+            ]
+        )
 
         return "\n".join(prompt_parts)
 

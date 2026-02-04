@@ -269,9 +269,7 @@ class TestIndependentCompiler:
         # Mock LLM client - generation succeeds, review always fails
         mock_client = MagicMock()
         mock_client.generate.side_effect = [
-            GenerationResult(
-                success=True, output="Generated code", session_id="test-session"
-            ),
+            GenerationResult(success=True, output="Generated code", session_id="test-session"),
         ] + [
             GenerationResult(
                 success=True, output="REVIEW_FAILED\n- Missing method X", session_id="test-session"
@@ -280,9 +278,7 @@ class TestIndependentCompiler:
         ]
 
         mock_runner = MagicMock()
-        mock_runner.run_test.return_value = RunResult(
-            success=True, output="passed", returncode=0
-        )
+        mock_runner.run_test.return_value = RunResult(success=True, output="passed", returncode=0)
 
         compiler = IndependentCompiler(
             client=mock_client,
@@ -313,13 +309,9 @@ class TestIndependentCompiler:
         # Mock LLM client - generation succeeds, but fixes don't help
         mock_client = MagicMock()
         mock_client.generate.side_effect = [
-            GenerationResult(
-                success=True, output="Generated code", session_id="test-session"
-            ),
+            GenerationResult(success=True, output="Generated code", session_id="test-session"),
         ] + [
-            GenerationResult(
-                success=True, output="Fixed code", session_id="test-session"
-            )
+            GenerationResult(success=True, output="Fixed code", session_id="test-session")
             for _ in range(MAX_REVIEW_RETRIES)
         ]
 
@@ -360,21 +352,15 @@ class TestIndependentCompiler:
         # Mock LLM client - generation succeeds, first review fails, second passes
         mock_client = MagicMock()
         mock_client.generate.side_effect = [
-            GenerationResult(
-                success=True, output="Generated code", session_id="test-session"
-            ),
+            GenerationResult(success=True, output="Generated code", session_id="test-session"),
             GenerationResult(
                 success=True, output="REVIEW_FAILED\n- Missing method", session_id="test-session"
             ),
-            GenerationResult(
-                success=True, output="REVIEW_PASSED", session_id="test-session"
-            ),
+            GenerationResult(success=True, output="REVIEW_PASSED", session_id="test-session"),
         ]
 
         mock_runner = MagicMock()
-        mock_runner.run_test.return_value = RunResult(
-            success=True, output="passed", returncode=0
-        )
+        mock_runner.run_test.return_value = RunResult(success=True, output="passed", returncode=0)
 
         compiler = IndependentCompiler(
             client=mock_client,
@@ -404,15 +390,9 @@ class TestIndependentCompiler:
         # Mock LLM client - generation succeeds, then fix prompt, then review passes
         mock_client = MagicMock()
         mock_client.generate.side_effect = [
-            GenerationResult(
-                success=True, output="Generated code", session_id="test-session"
-            ),
-            GenerationResult(
-                success=True, output="Fixed the issue", session_id="test-session"
-            ),
-            GenerationResult(
-                success=True, output="REVIEW_PASSED", session_id="test-session"
-            ),
+            GenerationResult(success=True, output="Generated code", session_id="test-session"),
+            GenerationResult(success=True, output="Fixed the issue", session_id="test-session"),
+            GenerationResult(success=True, output="REVIEW_PASSED", session_id="test-session"),
         ]
 
         mock_runner = MagicMock()
@@ -476,18 +456,12 @@ class TestIndependentCompiler:
         # Track session_id usage
         mock_client = MagicMock()
         mock_client.generate.side_effect = [
-            GenerationResult(
-                success=True, output="Generated code", session_id="session-abc"
-            ),
-            GenerationResult(
-                success=True, output="REVIEW_PASSED", session_id="session-abc"
-            ),
+            GenerationResult(success=True, output="Generated code", session_id="session-abc"),
+            GenerationResult(success=True, output="REVIEW_PASSED", session_id="session-abc"),
         ]
 
         mock_runner = MagicMock()
-        mock_runner.run_test.return_value = RunResult(
-            success=True, output="passed", returncode=0
-        )
+        mock_runner.run_test.return_value = RunResult(success=True, output="passed", returncode=0)
 
         compiler = IndependentCompiler(
             client=mock_client,
@@ -511,8 +485,7 @@ class TestIndependentCompiler:
         # Second call (review) should use the session_id from first call
         second_call = mock_client.generate.call_args_list[1]
         session_match = (
-            second_call[0][1] == "session-abc"
-            or second_call[1].get("session_id") == "session-abc"
+            second_call[0][1] == "session-abc" or second_call[1].get("session_id") == "session-abc"
         )
         assert session_match
 

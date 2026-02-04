@@ -78,7 +78,7 @@ class CppTestRunner:
                 raise CppRunnerError(
                     f"{self.compiler} check failed: {result.stderr or result.stdout}"
                 )
-            logger.info("C++ compiler: %s", result.stdout.split('\n')[0])
+            logger.info("C++ compiler: %s", result.stdout.split("\n")[0])
             return True
         except FileNotFoundError:
             raise CppRunnerError(
@@ -119,8 +119,10 @@ class CppTestRunner:
             compile_cmd = [
                 self.compiler,
                 f"-std={self.std}",
-                "-o", str(executable),
-                "-I", str(self.working_dir),
+                "-o",
+                str(executable),
+                "-I",
+                str(self.working_dir),
             ]
 
             # Add custom include paths

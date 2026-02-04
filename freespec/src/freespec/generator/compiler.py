@@ -254,8 +254,11 @@ class IndependentCompiler:
             # Run tests
             test_result = runner.run_test(test_path)
             if not test_result.success:
-                logger.warning("  Tests failed (attempt %d/%d), asking to fix...",
-                              attempt + 1, MAX_REVIEW_RETRIES)
+                logger.warning(
+                    "  Tests failed (attempt %d/%d), asking to fix...",
+                    attempt + 1,
+                    MAX_REVIEW_RETRIES,
+                )
                 last_failure_reason = f"Tests failed:\n{test_result.output}"
                 fix_prompt = (
                     f"Tests failed when running: python -m pytest {test_path} -v --tb=short\n\n"

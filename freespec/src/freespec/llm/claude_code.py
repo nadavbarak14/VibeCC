@@ -159,22 +159,22 @@ class ClaudeCodeClient:
         log_file = self.log_dir / log_filename
 
         with open(log_file, "w") as f:
-            f.write(f"{'='*80}\n")
+            f.write(f"{'=' * 80}\n")
             f.write("FREESPEC COMPILATION LOG\n")
-            f.write(f"{'='*80}\n\n")
+            f.write(f"{'=' * 80}\n\n")
             f.write(f"Timestamp: {datetime.now().isoformat()}\n")
             f.write(f"Spec: {self._current_spec_id or 'unknown'}\n")
             f.write(f"Duration: {duration:.2f} seconds\n")
             f.write(f"Success: {result.success}\n")
             if result.error:
                 f.write(f"Error: {result.error}\n")
-            f.write(f"\n{'='*80}\n")
+            f.write(f"\n{'=' * 80}\n")
             f.write(f"PROMPT ({len(prompt)} chars)\n")
-            f.write(f"{'='*80}\n\n")
+            f.write(f"{'=' * 80}\n\n")
             f.write(prompt)
-            f.write(f"\n\n{'='*80}\n")
+            f.write(f"\n\n{'=' * 80}\n")
             f.write("CLAUDE CODE OUTPUT\n")
-            f.write(f"{'='*80}\n\n")
+            f.write(f"{'=' * 80}\n\n")
             f.write(result.output)
             f.write("\n")
 
@@ -197,14 +197,22 @@ class ClaudeCodeClient:
         if is_resume:
             # Continue existing session
             cmd = [
-                "claude", "--resume", session_id,
-                "-p", prompt, "--dangerously-skip-permissions",
+                "claude",
+                "--resume",
+                session_id,
+                "-p",
+                prompt,
+                "--dangerously-skip-permissions",
             ]
         else:
             # New session with explicit ID
             cmd = [
-                "claude", "--session-id", session_id,
-                "-p", prompt, "--dangerously-skip-permissions",
+                "claude",
+                "--session-id",
+                session_id,
+                "-p",
+                prompt,
+                "--dangerously-skip-permissions",
             ]
 
         process = subprocess.Popen(
