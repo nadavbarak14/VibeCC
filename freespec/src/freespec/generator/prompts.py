@@ -64,7 +64,6 @@ class PromptBuilder:
         Returns:
             Complete prompt for the LLM.
         """
-        lang_info = self._get_language_info(language)
         lang = language.lower()
 
         prompt_parts = [
@@ -544,8 +543,13 @@ class PromptBuilder:
                 "test_command": "g++ to compile, then run the executable",
                 "mock_instruction": "use dependency injection or test doubles for mocking",
                 "example_function": "`create_student()` or `Student::create()`",
-                "impl_requirements": "Use modern C++ (C++17 or later), proper RAII, and smart pointers",
-                "test_requirements": "Use Catch2 (single-header) for testing. Include catch.hpp and use TEST_CASE/REQUIRE macros",
+                "impl_requirements": (
+                    "Use modern C++ (C++17 or later), proper RAII, and smart pointers"
+                ),
+                "test_requirements": (
+                    "Use Catch2 (single-header) for testing. "
+                    "Include catch.hpp and use TEST_CASE/REQUIRE macros"
+                ),
                 "no_skip_instruction": "no SKIP or disabled tests",
                 "header_ext": ".hpp",
                 "impl_ext": ".cpp",

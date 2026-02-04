@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from freespec.generator.runner import PytestRunner, RunResult, RunnerError
+from freespec.generator.runner import PytestRunner, RunnerError, RunResult
 
 
 class TestRunResult:
