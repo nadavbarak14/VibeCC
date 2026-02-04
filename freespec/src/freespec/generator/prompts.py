@@ -476,6 +476,57 @@ class PromptBuilder:
 
         return "\n".join(prompt_parts)
 
+    def build_review_prompt(
+        self,
+        spec: SpecFile,
+        impl_path: Path,
+        test_path: Path,
+    ) -> str:
+        """Build a prompt to review if implementation fulfills the spec.
+
+        This is used after tests pass to verify that all spec requirements
+        are actually implemented correctly, not just that the tests pass.
+
+        Args:
+            spec: The original spec file.
+            impl_path: Path to the generated implementation file.
+            test_path: Path to the generated test file.
+
+        Returns:
+            Complete review prompt for the LLM.
+        """
+        prompt_parts = [
+            "REVIEW the implementation against the spec.",
+            "",
+            "## Original Spec",
+            "",
+            "```spec",
+            spec.full_content,
+            "```",
+            "",
+            "## Your Task",
+            "",
+            "1. Read the implementation at `{impl_path}`".format(impl_path=impl_path),
+            "2. Read the tests at `{test_path}`".format(test_path=test_path),
+            "3. Check if ALL exports from the spec are properly implemented",
+            "4. Check if ALL test cases from the spec are covered",
+            "5. Check if the implementation matches the description",
+            "",
+            "## Response Format",
+            "",
+            "If everything is correct, respond with exactly:",
+            "REVIEW_PASSED",
+            "",
+            "If there are issues, respond with:",
+            "REVIEW_FAILED",
+            "- Issue 1: ...",
+            "- Issue 2: ...",
+            "",
+            "Then fix the issues and run the tests again.",
+        ]
+
+        return "\n".join(prompt_parts)
+
     def _get_language_info(self, language: str) -> dict[str, str]:
         """Get language-specific prompt information.
 

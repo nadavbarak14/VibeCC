@@ -25,6 +25,9 @@ class CompileError(Exception):
     """Raised when compilation fails."""
 
 
+MAX_REVIEW_RETRIES = 3
+
+
 @dataclass
 class CompileResult:
     """Result of compiling a single spec file."""
@@ -36,6 +39,8 @@ class CompileResult:
     error: str | None = None
     duration_seconds: float = 0.0
     log_file: Path | None = None
+    review_attempts: int = 0
+    review_passed: bool = False
 
 
 @dataclass
@@ -165,10 +170,14 @@ class IndependentCompiler:
         spec: SpecFile,
         context: CompileContext,
     ) -> CompileResult:
-        """Compile a single spec file with test verification.
+        """Compile a single spec file with test verification and review.
 
-        Claude Code handles iteration internally - we just prompt once
-        and let it work until tests pass.
+        Flow:
+        1. Generate implementation and tests (Claude Code iterates internally)
+        2. Verify files exist
+        3. Run tests
+        4. If tests pass, run review to check spec fulfillment
+        5. If review fails, send feedback and retry (up to MAX_REVIEW_RETRIES)
 
         Args:
             spec: The spec to compile.
@@ -206,6 +215,9 @@ class IndependentCompiler:
         )
 
         result = self.client.generate(prompt)
+        session_id = result.session_id
+        total_duration = result.duration_seconds
+        last_log_file = result.log_file
 
         if not result.success:
             logger.error("  Generation failed: %s", result.error)
@@ -215,53 +227,86 @@ class IndependentCompiler:
                 impl_path=impl_path,
                 test_path=test_path,
                 error=f"Generation failed: {result.error}",
-                duration_seconds=result.duration_seconds,
-                log_file=result.log_file,
+                duration_seconds=total_duration,
+                log_file=last_log_file,
             )
             context.results.append(compile_result)
             return compile_result
 
-        # Verify files exist and tests pass
-        if not impl_path.exists() or not test_path.exists():
-            logger.error("  Files not written")
-            compile_result = CompileResult(
-                spec_id=spec.spec_id,
-                success=False,
-                impl_path=impl_path,
-                test_path=test_path,
-                error="Implementation or test file not written",
-                duration_seconds=result.duration_seconds,
-                log_file=result.log_file,
-            )
-            context.results.append(compile_result)
-            return compile_result
-
-        # Verify tests pass
+        # Review loop - verify files, tests, and spec fulfillment
         runner = self.test_runner or PytestRunner(working_dir=context.config.root_path)
-        test_result = runner.run_test(test_path)
+        last_failure_reason = "Unknown failure"
+        review_attempts = 0
 
-        if test_result.success:
-            logger.info("  Tests passed!")
-            compile_result = CompileResult(
-                spec_id=spec.spec_id,
-                success=True,
-                impl_path=impl_path,
-                test_path=test_path,
-                duration_seconds=result.duration_seconds,
-                log_file=result.log_file,
-            )
-        else:
-            logger.warning("  Tests failed")
-            compile_result = CompileResult(
-                spec_id=spec.spec_id,
-                success=False,
-                impl_path=impl_path,
-                test_path=test_path,
-                error=f"Tests failed:\n{test_result.output}",
-                duration_seconds=result.duration_seconds,
-                log_file=result.log_file,
-            )
+        for attempt in range(MAX_REVIEW_RETRIES):
+            # Verify files exist
+            if not impl_path.exists() or not test_path.exists():
+                logger.warning("  Files not written, asking to write them...")
+                last_failure_reason = "Files not written"
+                result = self.client.generate(
+                    "The files were not written. Please write them to the specified paths.",
+                    session_id,
+                )
+                total_duration += result.duration_seconds
+                last_log_file = result.log_file or last_log_file
+                continue
 
+            # Run tests
+            test_result = runner.run_test(test_path)
+            if not test_result.success:
+                logger.warning("  Tests failed (attempt %d/%d), asking to fix...",
+                              attempt + 1, MAX_REVIEW_RETRIES)
+                last_failure_reason = f"Tests failed:\n{test_result.output}"
+                fix_prompt = (
+                    f"Tests failed when running: python -m pytest {test_path} -v --tb=short\n\n"
+                    f"Output:\n{test_result.output}\n\n"
+                    "Fix the code and run that exact command to verify."
+                )
+                result = self.client.generate(fix_prompt, session_id)
+                total_duration += result.duration_seconds
+                last_log_file = result.log_file or last_log_file
+                continue
+
+            # Tests passed - now REVIEW
+            logger.info("  Tests passed, running review...")
+            review_attempts += 1
+            review_prompt = self.prompt_builder.build_review_prompt(spec, impl_path, test_path)
+            review_result = self.client.generate(review_prompt, session_id)
+            total_duration += review_result.duration_seconds
+            last_log_file = review_result.log_file or last_log_file
+
+            if "REVIEW_PASSED" in review_result.output:
+                logger.info("  Review passed!")
+                compile_result = CompileResult(
+                    spec_id=spec.spec_id,
+                    success=True,
+                    impl_path=impl_path,
+                    test_path=test_path,
+                    duration_seconds=total_duration,
+                    log_file=last_log_file,
+                    review_attempts=review_attempts,
+                    review_passed=True,
+                )
+                context.results.append(compile_result)
+                return compile_result
+
+            # Review failed - Claude was already told to fix issues in the review prompt
+            last_failure_reason = f"Review failed: {review_result.output[:500]}"
+            logger.info(f"  Review failed (attempt {review_attempts}/{MAX_REVIEW_RETRIES})")
+
+        # All retries exhausted
+        logger.error("  Compilation failed after %d attempts", MAX_REVIEW_RETRIES)
+        compile_result = CompileResult(
+            spec_id=spec.spec_id,
+            success=False,
+            impl_path=impl_path,
+            test_path=test_path,
+            error=last_failure_reason,
+            duration_seconds=total_duration,
+            log_file=last_log_file,
+            review_attempts=review_attempts,
+            review_passed=False,
+        )
         context.results.append(compile_result)
         return compile_result
 

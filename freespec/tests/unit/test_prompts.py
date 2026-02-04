@@ -240,3 +240,42 @@ class TestPromptBuilder:
 
         # Should mention mocking
         assert "mock" in prompt.lower()
+
+    def test_build_review_prompt(self, builder: PromptBuilder) -> None:
+        """Should build a review prompt with spec content and file paths."""
+        spec = make_spec("student", "entities")
+        impl_path = Path("/output/src/entities/student.py")
+        test_path = Path("/output/tests/entities/test_student.py")
+
+        prompt = builder.build_review_prompt(
+            spec=spec,
+            impl_path=impl_path,
+            test_path=test_path,
+        )
+
+        # Should include key elements
+        assert "REVIEW" in prompt
+        assert str(impl_path) in prompt
+        assert str(test_path) in prompt
+        assert spec.name in prompt
+        # Should include response format
+        assert "REVIEW_PASSED" in prompt
+        assert "REVIEW_FAILED" in prompt
+        # Should include spec content
+        assert "exports" in prompt.lower()
+
+    def test_build_review_prompt_includes_spec_content(self, builder: PromptBuilder) -> None:
+        """Should include the full spec content in the review prompt."""
+        spec = make_spec("student", "entities")
+        impl_path = Path("/output/src/entities/student.py")
+        test_path = Path("/output/tests/entities/test_student.py")
+
+        prompt = builder.build_review_prompt(
+            spec=spec,
+            impl_path=impl_path,
+            test_path=test_path,
+        )
+
+        # Should include spec content in a code block
+        assert "```spec" in prompt
+        assert spec.full_content in prompt

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import subprocess
 import time
+import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -29,6 +30,7 @@ class GenerationResult:
     error: str | None = None
     duration_seconds: float = 0.0
     log_file: Path | None = None
+    session_id: str | None = None
 
 
 class ClaudeCodeClient:
@@ -60,20 +62,27 @@ class ClaudeCodeClient:
         """Set the current spec being compiled (for log file naming)."""
         self._current_spec_id = spec_id
 
-    def generate(self, prompt: str) -> GenerationResult:
+    def generate(self, prompt: str, session_id: str | None = None) -> GenerationResult:
         """Generate code using Claude Code CLI.
 
         Args:
             prompt: The prompt describing what to generate.
+            session_id: Optional session ID to continue an existing conversation.
+                If provided, uses --resume to continue the session.
+                If None, creates a new session with a generated ID.
 
         Returns:
-            GenerationResult with success status and output.
+            GenerationResult with success status, output, and session_id for continuation.
         """
         logger.debug("Generating with prompt (%d chars)", len(prompt))
         start_time = time.time()
 
+        # Generate or use existing session ID
+        effective_session_id = session_id or str(uuid.uuid4())
+        is_resume = session_id is not None
+
         try:
-            result = self._run_claude(prompt)
+            result = self._run_claude(prompt, effective_session_id, is_resume)
             duration = time.time() - start_time
             result.duration_seconds = duration
 
@@ -98,6 +107,7 @@ class ClaudeCodeClient:
                 output=output,
                 error=f"Claude Code timed out after {self.timeout} seconds",
                 duration_seconds=duration,
+                session_id=effective_session_id,
             )
             if self.log_dir:
                 result.log_file = self._save_log(prompt, result, duration)
@@ -110,6 +120,7 @@ class ClaudeCodeClient:
                 output="",
                 error="Claude Code CLI not found. Ensure 'claude' is installed and in PATH.",
                 duration_seconds=duration,
+                session_id=effective_session_id,
             )
             if self.log_dir:
                 result.log_file = self._save_log(prompt, result, duration)
@@ -122,6 +133,7 @@ class ClaudeCodeClient:
                 output="",
                 error=f"Failed to execute Claude Code: {e}",
                 duration_seconds=duration,
+                session_id=effective_session_id,
             )
             if self.log_dir:
                 result.log_file = self._save_log(prompt, result, duration)
@@ -148,7 +160,7 @@ class ClaudeCodeClient:
 
         with open(log_file, "w") as f:
             f.write(f"{'='*80}\n")
-            f.write(f"FREESPEC COMPILATION LOG\n")
+            f.write("FREESPEC COMPILATION LOG\n")
             f.write(f"{'='*80}\n\n")
             f.write(f"Timestamp: {datetime.now().isoformat()}\n")
             f.write(f"Spec: {self._current_spec_id or 'unknown'}\n")
@@ -161,7 +173,7 @@ class ClaudeCodeClient:
             f.write(f"{'='*80}\n\n")
             f.write(prompt)
             f.write(f"\n\n{'='*80}\n")
-            f.write(f"CLAUDE CODE OUTPUT\n")
+            f.write("CLAUDE CODE OUTPUT\n")
             f.write(f"{'='*80}\n\n")
             f.write(result.output)
             f.write("\n")
@@ -169,16 +181,31 @@ class ClaudeCodeClient:
         logger.info("Log saved to: %s", log_file)
         return log_file
 
-    def _run_claude(self, prompt: str) -> GenerationResult:
+    def _run_claude(
+        self, prompt: str, session_id: str, is_resume: bool = False
+    ) -> GenerationResult:
         """Run the Claude Code CLI subprocess.
 
         Args:
             prompt: The prompt to send.
+            session_id: Session ID for the conversation.
+            is_resume: If True, resume an existing session; if False, start new session.
 
         Returns:
             GenerationResult based on execution.
         """
-        cmd = ["claude", "-p", prompt, "--dangerously-skip-permissions"]
+        if is_resume:
+            # Continue existing session
+            cmd = [
+                "claude", "--resume", session_id,
+                "-p", prompt, "--dangerously-skip-permissions",
+            ]
+        else:
+            # New session with explicit ID
+            cmd = [
+                "claude", "--session-id", session_id,
+                "-p", prompt, "--dangerously-skip-permissions",
+            ]
 
         process = subprocess.Popen(
             cmd,
@@ -208,12 +235,13 @@ class ClaudeCodeClient:
         output = "\n".join(output_lines)
 
         if process.returncode == 0:
-            return GenerationResult(success=True, output=output)
+            return GenerationResult(success=True, output=output, session_id=session_id)
         else:
             return GenerationResult(
                 success=False,
                 output=output,
                 error=f"Claude Code exited with code {process.returncode}",
+                session_id=session_id,
             )
 
     def check_available(self) -> bool:

@@ -1,10 +1,11 @@
 """Unit tests for independent compiler."""
 
 from pathlib import Path
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 
 from freespec.config import FreeSpecConfig, OutputConfig, SettingsConfig
 from freespec.generator.compiler import (
+    MAX_REVIEW_RETRIES,
     CompileContext,
     CompileResult,
     IndependentCompiler,
@@ -73,6 +74,27 @@ class TestCompileResult:
 
         assert result.success is False
         assert result.error == "Tests failed"
+
+    def test_review_tracking_fields(self, tmp_path: Path) -> None:
+        """Should track review attempts and status."""
+        result = CompileResult(
+            spec_id="entities/student",
+            success=True,
+            impl_path=tmp_path / "student.py",
+            test_path=tmp_path / "test_student.py",
+            review_attempts=2,
+            review_passed=True,
+        )
+
+        assert result.review_attempts == 2
+        assert result.review_passed is True
+
+    def test_review_fields_default_values(self) -> None:
+        """Should have default values for review fields."""
+        result = CompileResult(spec_id="test", success=True)
+
+        assert result.review_attempts == 0
+        assert result.review_passed is False
 
 
 class TestCompileContext:
@@ -183,19 +205,28 @@ class TestIndependentCompiler:
 
         assert filtered == {}
 
-    def test_compile_file_success(self, tmp_path: Path) -> None:
-        """Should succeed when generation and tests pass."""
+    def test_compile_file_success_with_review(self, tmp_path: Path) -> None:
+        """Should succeed when generation, tests, and review pass."""
         config = make_config(tmp_path)
         spec = make_spec("student", "entities")
         all_headers = {"entities/student": "class Student: pass"}
 
-        # Mock LLM client
+        # Mock LLM client - first call generates, second call reviews
         mock_client = MagicMock()
-        mock_client.generate.return_value = GenerationResult(
-            success=True,
-            output="Generated code",
-            error=None,
-        )
+        mock_client.generate.side_effect = [
+            GenerationResult(
+                success=True,
+                output="Generated code",
+                error=None,
+                session_id="test-session-123",
+            ),
+            GenerationResult(
+                success=True,
+                output="REVIEW_PASSED",
+                error=None,
+                session_id="test-session-123",
+            ),
+        ]
 
         # Mock test runner
         mock_runner = MagicMock()
@@ -223,27 +254,34 @@ class TestIndependentCompiler:
 
         assert result.success is True
         assert result.spec_id == "entities/student"
-        mock_client.generate.assert_called_once()
+        assert result.review_passed is True
+        assert result.review_attempts == 1
+        # First call is compilation, second is review
+        assert mock_client.generate.call_count == 2
         mock_runner.run_test.assert_called_once()
 
-    def test_compile_file_test_failure(self, tmp_path: Path) -> None:
-        """Should fail when tests fail."""
+    def test_compile_file_review_failure_exhausts_retries(self, tmp_path: Path) -> None:
+        """Should fail when review fails after max retries."""
         config = make_config(tmp_path)
         spec = make_spec("student", "entities")
         all_headers = {}
 
+        # Mock LLM client - generation succeeds, review always fails
         mock_client = MagicMock()
-        mock_client.generate.return_value = GenerationResult(
-            success=True,
-            output="Generated code",
-            error=None,
-        )
+        mock_client.generate.side_effect = [
+            GenerationResult(
+                success=True, output="Generated code", session_id="test-session"
+            ),
+        ] + [
+            GenerationResult(
+                success=True, output="REVIEW_FAILED\n- Missing method X", session_id="test-session"
+            )
+            for _ in range(MAX_REVIEW_RETRIES)
+        ]
 
         mock_runner = MagicMock()
         mock_runner.run_test.return_value = RunResult(
-            success=False,
-            output="tests failed",
-            returncode=1,
+            success=True, output="passed", returncode=0
         )
 
         compiler = IndependentCompiler(
@@ -262,7 +300,150 @@ class TestIndependentCompiler:
         result = compiler.compile_file(spec, context)
 
         assert result.success is False
+        assert "Review failed" in result.error
+        assert result.review_attempts == MAX_REVIEW_RETRIES
+        assert result.review_passed is False
+
+    def test_compile_file_test_failure_exhausts_retries(self, tmp_path: Path) -> None:
+        """Should fail with test error message when tests keep failing."""
+        config = make_config(tmp_path)
+        spec = make_spec("student", "entities")
+        all_headers = {}
+
+        # Mock LLM client - generation succeeds, but fixes don't help
+        mock_client = MagicMock()
+        mock_client.generate.side_effect = [
+            GenerationResult(
+                success=True, output="Generated code", session_id="test-session"
+            ),
+        ] + [
+            GenerationResult(
+                success=True, output="Fixed code", session_id="test-session"
+            )
+            for _ in range(MAX_REVIEW_RETRIES)
+        ]
+
+        # Tests always fail
+        mock_runner = MagicMock()
+        mock_runner.run_test.return_value = RunResult(
+            success=False, output="AssertionError: expected X", returncode=1
+        )
+
+        compiler = IndependentCompiler(
+            client=mock_client,
+            test_runner=mock_runner,
+        )
+        context = CompileContext(config=config, all_headers=all_headers)
+
+        impl_path = compiler._get_impl_path(spec, config)
+        test_path = compiler._get_test_path(spec, config)
+        impl_path.parent.mkdir(parents=True, exist_ok=True)
+        test_path.parent.mkdir(parents=True, exist_ok=True)
+        impl_path.write_text("class Student: pass")
+        test_path.write_text("def test_student(): pass")
+
+        result = compiler.compile_file(spec, context)
+
+        assert result.success is False
+        # Error should mention tests failed, not review
         assert "Tests failed" in result.error
+        # Never got to review
+        assert result.review_attempts == 0
+        assert result.review_passed is False
+
+    def test_compile_file_review_passes_after_retry(self, tmp_path: Path) -> None:
+        """Should succeed when review passes after initial failure."""
+        config = make_config(tmp_path)
+        spec = make_spec("student", "entities")
+        all_headers = {}
+
+        # Mock LLM client - generation succeeds, first review fails, second passes
+        mock_client = MagicMock()
+        mock_client.generate.side_effect = [
+            GenerationResult(
+                success=True, output="Generated code", session_id="test-session"
+            ),
+            GenerationResult(
+                success=True, output="REVIEW_FAILED\n- Missing method", session_id="test-session"
+            ),
+            GenerationResult(
+                success=True, output="REVIEW_PASSED", session_id="test-session"
+            ),
+        ]
+
+        mock_runner = MagicMock()
+        mock_runner.run_test.return_value = RunResult(
+            success=True, output="passed", returncode=0
+        )
+
+        compiler = IndependentCompiler(
+            client=mock_client,
+            test_runner=mock_runner,
+        )
+        context = CompileContext(config=config, all_headers=all_headers)
+
+        impl_path = compiler._get_impl_path(spec, config)
+        test_path = compiler._get_test_path(spec, config)
+        impl_path.parent.mkdir(parents=True, exist_ok=True)
+        test_path.parent.mkdir(parents=True, exist_ok=True)
+        impl_path.write_text("class Student: pass")
+        test_path.write_text("def test_student(): pass")
+
+        result = compiler.compile_file(spec, context)
+
+        assert result.success is True
+        assert result.review_passed is True
+        assert result.review_attempts == 2  # 2 reviews: first failed, second passed
+
+    def test_compile_file_test_failure_retries(self, tmp_path: Path) -> None:
+        """Should retry when tests fail, then succeed on review."""
+        config = make_config(tmp_path)
+        spec = make_spec("student", "entities")
+        all_headers = {}
+
+        # Mock LLM client - generation succeeds, then fix prompt, then review passes
+        mock_client = MagicMock()
+        mock_client.generate.side_effect = [
+            GenerationResult(
+                success=True, output="Generated code", session_id="test-session"
+            ),
+            GenerationResult(
+                success=True, output="Fixed the issue", session_id="test-session"
+            ),
+            GenerationResult(
+                success=True, output="REVIEW_PASSED", session_id="test-session"
+            ),
+        ]
+
+        mock_runner = MagicMock()
+        mock_runner.run_test.side_effect = [
+            RunResult(success=False, output="tests failed", returncode=1),
+            RunResult(success=True, output="passed", returncode=0),
+        ]
+
+        compiler = IndependentCompiler(
+            client=mock_client,
+            test_runner=mock_runner,
+        )
+        context = CompileContext(config=config, all_headers=all_headers)
+
+        impl_path = compiler._get_impl_path(spec, config)
+        test_path = compiler._get_test_path(spec, config)
+        impl_path.parent.mkdir(parents=True, exist_ok=True)
+        test_path.parent.mkdir(parents=True, exist_ok=True)
+        impl_path.write_text("class Student: pass")
+        test_path.write_text("def test_student(): pass")
+
+        result = compiler.compile_file(spec, context)
+
+        assert result.success is True
+        assert result.review_passed is True
+        # Only 1 review attempt (test failure doesn't count as review attempt)
+        assert result.review_attempts == 1
+        # 3 calls: initial, fix, review
+        assert mock_client.generate.call_count == 3
+        # 2 test runs: fail, then pass
+        assert mock_runner.run_test.call_count == 2
 
     def test_compile_file_llm_failure(self, tmp_path: Path) -> None:
         """Should fail on LLM error."""
@@ -275,6 +456,7 @@ class TestIndependentCompiler:
             success=False,
             output="",
             error="API error",
+            session_id="test-session",
         )
 
         compiler = IndependentCompiler(client=mock_client)
@@ -284,6 +466,51 @@ class TestIndependentCompiler:
 
         assert result.success is False
         assert "Generation failed" in result.error
+
+    def test_compile_file_uses_session_continuity(self, tmp_path: Path) -> None:
+        """Should pass session_id for continuity when fixing issues."""
+        config = make_config(tmp_path)
+        spec = make_spec("student", "entities")
+        all_headers = {}
+
+        # Track session_id usage
+        mock_client = MagicMock()
+        mock_client.generate.side_effect = [
+            GenerationResult(
+                success=True, output="Generated code", session_id="session-abc"
+            ),
+            GenerationResult(
+                success=True, output="REVIEW_PASSED", session_id="session-abc"
+            ),
+        ]
+
+        mock_runner = MagicMock()
+        mock_runner.run_test.return_value = RunResult(
+            success=True, output="passed", returncode=0
+        )
+
+        compiler = IndependentCompiler(
+            client=mock_client,
+            test_runner=mock_runner,
+        )
+        context = CompileContext(config=config, all_headers=all_headers)
+
+        impl_path = compiler._get_impl_path(spec, config)
+        test_path = compiler._get_test_path(spec, config)
+        impl_path.parent.mkdir(parents=True, exist_ok=True)
+        test_path.parent.mkdir(parents=True, exist_ok=True)
+        impl_path.write_text("class Student: pass")
+        test_path.write_text("def test_student(): pass")
+
+        compiler.compile_file(spec, context)
+
+        # First call is without session_id (new session)
+        first_call = mock_client.generate.call_args_list[0]
+        assert first_call[1].get("session_id") is None or "session_id" not in first_call[1]
+
+        # Second call (review) should use the session_id from first call
+        second_call = mock_client.generate.call_args_list[1]
+        assert second_call[0][1] == "session-abc" or second_call[1].get("session_id") == "session-abc"
 
     def test_compile_file_passes_header_paths(self, tmp_path: Path) -> None:
         """Should pass header file paths for @mentioned dependencies."""
@@ -301,12 +528,14 @@ class TestIndependentCompiler:
         student_header.write_text("class Student: pass")
 
         mock_client = MagicMock()
-        mock_client.generate.return_value = GenerationResult(
-            success=True, output="code", error=None
-        )
+        mock_client.generate.side_effect = [
+            GenerationResult(success=True, output="code", session_id="test-session"),
+            GenerationResult(success=True, output="REVIEW_PASSED", session_id="test-session"),
+        ]
 
         mock_builder = MagicMock()
         mock_builder.build_compile_prompt.return_value = "prompt"
+        mock_builder.build_review_prompt.return_value = "review prompt"
 
         mock_runner = MagicMock()
         mock_runner.run_test.return_value = RunResult(success=True, output="passed", returncode=0)
@@ -343,9 +572,13 @@ class TestIndependentCompiler:
         all_headers = {}
 
         mock_client = MagicMock()
-        mock_client.generate.return_value = GenerationResult(
-            success=True, output="code", error=None
-        )
+        # Each spec needs generation + review
+        mock_client.generate.side_effect = [
+            GenerationResult(success=True, output="code", session_id="session-1"),
+            GenerationResult(success=True, output="REVIEW_PASSED", session_id="session-1"),
+            GenerationResult(success=True, output="code", session_id="session-2"),
+            GenerationResult(success=True, output="REVIEW_PASSED", session_id="session-2"),
+        ]
 
         mock_runner = MagicMock()
         mock_runner.run_test.return_value = RunResult(success=True, output="passed", returncode=0)
@@ -379,10 +612,14 @@ class TestIndependentCompiler:
         ]
         all_headers = {}
 
+        # Generation succeeds, but tests always fail during retry loop
         mock_client = MagicMock()
-        mock_client.generate.return_value = GenerationResult(
-            success=True, output="code", error=None
-        )
+        mock_client.generate.side_effect = [
+            GenerationResult(success=True, output="code", session_id="session-1"),
+        ] + [
+            GenerationResult(success=True, output="fixed", session_id="session-1")
+            for _ in range(MAX_REVIEW_RETRIES)
+        ]
 
         mock_runner = MagicMock()
         mock_runner.run_test.return_value = RunResult(success=False, output="failed", returncode=1)
@@ -405,3 +642,5 @@ class TestIndependentCompiler:
         # Should only have tried the first spec
         assert len(context.results) == 1
         assert context.results[0].spec_id == "entities/student"
+        # Should have test failure error, not review error
+        assert "Tests failed" in context.results[0].error
