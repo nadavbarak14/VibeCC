@@ -484,8 +484,8 @@ class TestIndependentCompiler:
         )
         assert session_match
 
-    def test_compile_file_passes_header_paths(self, tmp_path: Path) -> None:
-        """Should pass header file paths for @mentioned dependencies."""
+    def test_compile_file_passes_dependency_paths(self, tmp_path: Path) -> None:
+        """Should pass dependency file paths for @mentioned dependencies."""
         config = make_config(tmp_path)
         spec = make_spec("enrollment", "services", mentions=["entities/student"])
         all_headers = {
@@ -493,11 +493,11 @@ class TestIndependentCompiler:
             "entities/course": "class Course: pass",
         }
 
-        # Create the header file on disk (now in out/src/ directory)
+        # Create the dependency file on disk (in out/src/ directory)
         src_dir = config.get_src_path()
-        student_header = src_dir / "entities" / "student.py"
-        student_header.parent.mkdir(parents=True, exist_ok=True)
-        student_header.write_text("class Student: pass")
+        student_file = src_dir / "entities" / "student.py"
+        student_file.parent.mkdir(parents=True, exist_ok=True)
+        student_file.write_text("class Student: pass")
 
         mock_client = MagicMock()
         mock_client.generate.side_effect = [
@@ -528,11 +528,11 @@ class TestIndependentCompiler:
 
         compiler.compile_file(spec, context)
 
-        # Verify header paths were passed (not content)
+        # Verify dependency paths were passed (not content)
         call_kwargs = mock_builder.build_compile_prompt.call_args.kwargs
-        assert "header_paths" in call_kwargs
-        assert "entities/student" in call_kwargs["header_paths"]
-        assert call_kwargs["header_paths"]["entities/student"] == student_header
+        assert "dependency_paths" in call_kwargs
+        assert "entities/student" in call_kwargs["dependency_paths"]
+        assert call_kwargs["dependency_paths"]["entities/student"] == student_file
 
     def test_compile_all_processes_all_specs(self, tmp_path: Path) -> None:
         """Should compile all specs."""

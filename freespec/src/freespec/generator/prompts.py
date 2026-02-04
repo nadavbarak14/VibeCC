@@ -381,19 +381,19 @@ class PromptBuilder:
         language: str,
         impl_path: Path,
         test_path: Path,
-        header_paths: dict[str, Path] | None = None,
+        dependency_paths: dict[str, Path] | None = None,
     ) -> str:
-        """Build a prompt for in-place compilation (modify stub + create tests).
+        """Build a prompt for compiling a spec (fill in stub + create tests).
 
-        The stub file already exists at impl_path. This prompt instructs the LLM
-        to fill in the implementation bodies without changing the public API.
+        The stub file already exists at impl_path with NotImplementedError().
+        This prompt instructs the LLM to fill in the bodies and write tests.
 
         Args:
             spec: The spec file to compile.
             language: Target programming language.
-            impl_path: Path to the existing stub file (will be modified in-place).
-            test_path: Where the test file will be written.
-            header_paths: Map of @mentioned spec_id to their header file paths.
+            impl_path: Path to the existing stub file (modify in-place).
+            test_path: Where to write the test file.
+            dependency_paths: Map of @mentioned spec_id to their file paths.
 
         Returns:
             Complete prompt for the LLM.
@@ -401,19 +401,30 @@ class PromptBuilder:
         # Get language-specific instructions
         lang_info = self._get_language_info(language)
 
+        # Build import example based on impl_path
+        # e.g., out/src/entities/student.py -> from src.entities.student import ...
+        rel_parts = impl_path.parts
+        if "src" in rel_parts:
+            src_idx = rel_parts.index("src")
+            module_parts = rel_parts[src_idx:-1] + (impl_path.stem,)
+            import_example = ".".join(module_parts)
+        else:
+            import_example = f"src.{spec.category}.{spec.name}"
+
         prompt_parts = [
-            "IN-PLACE COMPILATION of a FreeSpec specification.",
+            "COMPILE a FreeSpec specification into working code.",
             "",
             "## Task",
             "",
             "You are implementing an EXISTING stub file. The stub already defines:",
-            "- All public classes and functions",
-            "- All type hints and signatures",
+            "- All public classes and functions with signatures",
+            "- All type hints",
             "- All docstrings",
+            "- Methods that raise NotImplementedError()",
             "",
             "Your job is to:",
             "1. Read the existing stub file",
-            "2. Replace NotImplementedError() with working code",
+            "2. Replace NotImplementedError() with working implementations",
             "3. Write tests that verify the implementation",
             f"4. Run tests with {lang_info['test_runner']} and iterate until they pass",
             "",
@@ -425,37 +436,35 @@ class PromptBuilder:
             "- ONLY replace NotImplementedError() with working code",
             "- Private helpers (names starting with _) ARE allowed",
             "",
-            "## Existing Stub File",
-            "",
-            f"Read the existing stub at: `{impl_path}`",
-            "",
         ]
 
-        if header_paths:
+        if dependency_paths:
             prompt_parts.extend(
                 [
-                    "## Dependencies (Header Files)",
+                    "## Dependencies",
                     "",
-                    "This module depends on the following interfaces.",
-                    "READ these header files to understand the API signatures:",
+                    "This module @mentions these dependencies. READ them to understand their APIs,",
+                    "then use normal Python imports:",
                     "",
                 ]
             )
-            for spec_id, path in sorted(header_paths.items()):
-                prompt_parts.append(f"- **{spec_id}**: `{path}`")
-            prompt_parts.extend(
-                [
-                    "",
-                    "IMPORTANT: Read each header file above to understand:",
-                    "- Class names and their constructors",
-                    "- Method signatures and return types",
-                    "- How to properly instantiate and use these classes",
-                    "",
-                ]
-            )
+            for spec_id, path in sorted(dependency_paths.items()):
+                # Convert path to import: out/src/entities/student.py -> src.entities.student
+                dep_parts = path.parts
+                if "src" in dep_parts:
+                    src_idx = dep_parts.index("src")
+                    dep_module = ".".join(dep_parts[src_idx:-1] + (path.stem,))
+                else:
+                    dep_module = f"src.{spec_id.replace('/', '.')}"
+                prompt_parts.append(f"- **{spec_id}**: `{path}` → `from {dep_module} import ...`")
+            prompt_parts.append("")
 
         prompt_parts.extend(
             [
+                "## Existing Stub File",
+                "",
+                f"Read and modify: `{impl_path}`",
+                "",
                 "## Spec File",
                 "",
                 f"Category: {spec.category}",
@@ -476,12 +485,13 @@ class PromptBuilder:
                 "- Read the existing stub file first",
                 "- Keep all existing signatures, types, and docstrings",
                 "- Only fill in method/function bodies",
+                "- Use normal Python imports for dependencies",
+                "  (e.g., `from src.entities.student import Student`)",
                 f"- {lang_info['impl_requirements']}",
                 "",
                 "### Tests",
-                f"- {lang_info['test_requirements']}",
-                "- Import directly from the implementation file",
-                "- Write COMPLETE tests that actually verify the implementation",
+                f"- Import from: `from {import_example} import ...`",
+                "- Write COMPLETE tests that verify the implementation",
                 "- DO NOT mock the module under test",
                 "- External dependencies (DB, network, etc.) MAY be mocked",
                 f"- Tests must PASS - {lang_info['no_skip_instruction']}",
@@ -490,9 +500,9 @@ class PromptBuilder:
                 "## Instructions",
                 "",
                 "1. READ the existing stub file at the implementation path",
-                "2. If there are dependencies, READ the header files to understand the APIs",
+                "2. If there are dependencies, READ them and use normal imports",
                 "3. Fill in implementation bodies (replace NotImplementedError)",
-                "4. Write tests that import and call the implementation's public API",
+                "4. Write tests that import from the module",
                 f"5. Run tests with {lang_info['test_command']} and iterate until they pass",
             ]
         )

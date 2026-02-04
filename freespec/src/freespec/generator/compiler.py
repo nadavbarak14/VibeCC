@@ -124,13 +124,6 @@ class IndependentCompiler:
             return ".cpp"
         return ".py"
 
-    def _get_header_ext(self, config: FreeSpecConfig) -> str:
-        """Get header file extension for the target language."""
-        lang = config.language.lower()
-        if lang in ("cpp", "c++"):
-            return ".hpp"
-        return ".py"
-
     def _get_impl_path(self, spec: SpecFile, config: FreeSpecConfig) -> Path:
         """Determine output path for a spec's implementation file.
 
@@ -159,29 +152,29 @@ class IndependentCompiler:
         """Filter headers to only those @mentioned by the spec."""
         return {m: all_headers[m] for m in spec.mentions if m in all_headers}
 
-    def _get_header_paths_for_spec(
+    def _get_dependency_paths_for_spec(
         self,
         spec: SpecFile,
         config: FreeSpecConfig,
     ) -> dict[str, Path]:
-        """Get header file paths for @mentioned dependencies.
+        """Get file paths for @mentioned dependencies.
 
-        Headers (stub files) are in the out/src/ directory structure.
+        Dependencies are in the out/src/ directory structure.
         """
-        header_paths: dict[str, Path] = {}
+        dependency_paths: dict[str, Path] = {}
         src_dir = config.get_src_path()
-        ext = self._get_header_ext(config)
+        ext = self._get_file_ext(config)
 
         for mention in spec.mentions:
-            # Parse mention like "entities/student" -> out/src/entities/student.py or .hpp
+            # Parse mention like "entities/student" -> out/src/entities/student.py or .cpp
             parts = mention.split("/")
             if len(parts) == 2:
                 category, name = parts
-                header_path = src_dir / category / f"{name}{ext}"
-                if header_path.exists():
-                    header_paths[mention] = header_path
+                dep_path = src_dir / category / f"{name}{ext}"
+                if dep_path.exists():
+                    dependency_paths[mention] = dep_path
 
-        return header_paths
+        return dependency_paths
 
     def _extract_code_from_output(self, output: str) -> str | None:
         """Try to extract code from LLM output if file wasn't written."""
@@ -235,13 +228,13 @@ class IndependentCompiler:
             original_exports = extract_public_exports(original_content)
             logger.debug("  Original exports: %s", sorted(original_exports))
 
-        # Get header file paths for @mentioned dependencies
-        header_paths = self._get_header_paths_for_spec(spec, context.config)
+        # Get file paths for @mentioned dependencies
+        dependency_paths = self._get_dependency_paths_for_spec(spec, context.config)
 
         logger.info(
             "Compiling %s (depends on: %s)",
             spec.spec_id,
-            list(header_paths.keys()) or "none",
+            list(dependency_paths.keys()) or "none",
         )
 
         # Set current spec for logging
@@ -253,7 +246,7 @@ class IndependentCompiler:
             language=context.config.language,
             impl_path=impl_path,
             test_path=test_path,
-            header_paths=header_paths,
+            dependency_paths=dependency_paths,
         )
 
         result = self.client.generate(prompt)
