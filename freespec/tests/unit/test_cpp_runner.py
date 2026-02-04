@@ -186,7 +186,7 @@ class TestCppTestRunner:
 
         assert result.success is False
         assert result.compile_returncode == 1
-        assert "Compilation failed" in result.output
+        assert "COMPILATION FAILED" in result.output
 
     @patch("freespec.generator.cpp_runner.tempfile.TemporaryDirectory")
     @patch("freespec.generator.cpp_runner.subprocess.run")
@@ -241,7 +241,7 @@ class TestCppTestRunner:
     def test_run_test_compiler_not_found(
         self, mock_run: MagicMock, mock_tmpdir: MagicMock, tmp_path: Path
     ) -> None:
-        """Should raise CppRunnerError when compiler not found during run."""
+        """Should return failure with helpful error when compiler not found."""
         test_file = tmp_path / "test_example.cpp"
         test_file.write_text("// test")
 
@@ -251,8 +251,52 @@ class TestCppTestRunner:
         mock_run.side_effect = FileNotFoundError("g++ not found")
 
         runner = CppTestRunner(working_dir=tmp_path)
+        result = runner.run_test(test_file)
 
-        with pytest.raises(CppRunnerError) as exc_info:
-            runner.run_test(test_file)
+        assert result.success is False
+        assert "compiler not found" in result.output.lower()
+        assert "g++" in result.output
 
-        assert "not found" in str(exc_info.value).lower()
+    def test_init_with_log_dir(self, tmp_path: Path) -> None:
+        """Should accept log_dir parameter."""
+        log_dir = tmp_path / "logs"
+        runner = CppTestRunner(working_dir=tmp_path, log_dir=log_dir)
+
+        assert runner.log_dir == log_dir
+
+    def test_init_with_out_dir(self, tmp_path: Path) -> None:
+        """Should accept out_dir parameter."""
+        out_dir = tmp_path / "out"
+        runner = CppTestRunner(working_dir=tmp_path, out_dir=out_dir)
+
+        assert runner.out_dir == out_dir
+
+    def test_set_current_spec(self, tmp_path: Path) -> None:
+        """Should set current spec for logging."""
+        runner = CppTestRunner(working_dir=tmp_path)
+
+        runner.set_current_spec("entities/student")
+
+        assert runner._current_spec_id == "entities/student"
+
+    def test_run_test_saves_log(self, tmp_path: Path) -> None:
+        """Should save log file when log_dir is configured."""
+        log_dir = tmp_path / "logs"
+        runner = CppTestRunner(working_dir=tmp_path, log_dir=log_dir)
+        runner.set_current_spec("entities/student")
+
+        test_path = tmp_path / "test_example.cpp"
+        # File doesn't exist - will fail but should still log
+
+        result = runner.run_test(test_path)
+
+        assert result.success is False
+        assert result.log_file is not None
+        assert result.log_file.exists()
+        assert "cpp" in result.log_file.name
+        assert "student" in result.log_file.name
+
+        # Check log content
+        log_content = result.log_file.read_text()
+        assert "FREESPEC C++ COMPILATION LOG" in log_content
+        assert "entities/student" in log_content

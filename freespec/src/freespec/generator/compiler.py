@@ -13,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from freespec.config import FreeSpecConfig
+from freespec.generator.cpp_runner import CppTestRunner
 from freespec.generator.prompts import PromptBuilder
 from freespec.generator.runner import PytestRunner
 from freespec.llm.claude_code import ClaudeCodeClient
@@ -69,7 +70,7 @@ class IndependentCompiler:
     Each file is compiled in isolation:
     1. Filter headers to only @mentioned dependencies
     2. Generate implementation + tests together in one LLM call
-    3. Run tests with pytest
+    3. Run tests with pytest (Python) or compiled executable (C++)
     4. If tests fail, retry with error feedback
     5. Report success/failure per module
     """
@@ -78,18 +79,43 @@ class IndependentCompiler:
         self,
         client: ClaudeCodeClient | None = None,
         prompt_builder: PromptBuilder | None = None,
-        test_runner: PytestRunner | None = None,
+        test_runner: PytestRunner | CppTestRunner | None = None,
+        log_dir: Path | None = None,
     ) -> None:
         """Initialize the independent compiler.
 
         Args:
             client: Claude Code client for LLM calls.
             prompt_builder: Builder for generation prompts.
-            test_runner: Runner for executing pytest (for verification).
+            test_runner: Runner for executing tests (auto-detected if None).
+            log_dir: Directory to save compilation logs.
         """
         self.client = client or ClaudeCodeClient()
         self.prompt_builder = prompt_builder or PromptBuilder()
         self.test_runner = test_runner
+        self.log_dir = log_dir
+
+    def _get_test_runner(self, config: FreeSpecConfig) -> PytestRunner | CppTestRunner:
+        """Get the appropriate test runner for the language.
+
+        Args:
+            config: Project configuration.
+
+        Returns:
+            PytestRunner for Python, CppTestRunner for C++.
+        """
+        if self.test_runner:
+            return self.test_runner
+
+        lang = config.language.lower()
+        if lang in ("cpp", "c++"):
+            return CppTestRunner(
+                working_dir=config.root_path,
+                log_dir=self.log_dir,
+                out_dir=config.get_output_path(),
+            )
+        else:
+            return PytestRunner(working_dir=config.root_path)
 
     def _get_file_ext(self, config: FreeSpecConfig) -> str:
         """Get file extension for the target language."""
@@ -250,9 +276,14 @@ class IndependentCompiler:
             return compile_result
 
         # Review loop - verify files, tests, and spec fulfillment
-        runner = self.test_runner or PytestRunner(working_dir=context.config.root_path)
+        runner = self._get_test_runner(context.config)
+        # Set current spec for logging (if runner supports it)
+        if hasattr(runner, "set_current_spec"):
+            runner.set_current_spec(spec.spec_id)
+
         last_failure_reason = "Unknown failure"
         review_attempts = 0
+        is_cpp = context.config.language.lower() in ("cpp", "c++")
 
         for attempt in range(MAX_REVIEW_RETRIES):
             # Verify files exist
@@ -268,7 +299,12 @@ class IndependentCompiler:
                 continue
 
             # Run tests
-            test_result = runner.run_test(test_path)
+            if is_cpp:
+                # For C++, pass both test and impl paths
+                test_result = runner.run_test(test_path, impl_path)
+            else:
+                test_result = runner.run_test(test_path)
+
             if not test_result.success:
                 logger.warning(
                     "  Tests failed (attempt %d/%d), asking to fix...",
@@ -276,11 +312,19 @@ class IndependentCompiler:
                     MAX_REVIEW_RETRIES,
                 )
                 last_failure_reason = f"Tests failed:\n{test_result.output}"
-                fix_prompt = (
-                    f"Tests failed when running: python -m pytest {test_path} -v --tb=short\n\n"
-                    f"Output:\n{test_result.output}\n\n"
-                    "Fix the code and run that exact command to verify."
-                )
+
+                if is_cpp:
+                    fix_prompt = (
+                        f"C++ compilation/tests failed.\n\n"
+                        f"Output:\n{test_result.output}\n\n"
+                        "Fix the code and ensure it compiles and tests pass."
+                    )
+                else:
+                    fix_prompt = (
+                        f"Tests failed when running: python -m pytest {test_path} -v --tb=short\n\n"
+                        f"Output:\n{test_result.output}\n\n"
+                        "Fix the code and run that exact command to verify."
+                    )
                 result = self.client.generate(fix_prompt, session_id)
                 total_duration += result.duration_seconds
                 last_log_file = result.log_file or last_log_file
