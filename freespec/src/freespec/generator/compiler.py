@@ -413,8 +413,7 @@ class IndependentCompiler:
                     else:
                         cmd = f"python -m pytest {test_path} -v --tb=short"
                         fix_prompt = (
-                            f"Tests failed when running: {cmd}\n\n"
-                            f"Output:\n{test_result.output}\n\n"
+                            f"Tests failed when running: {cmd}\n\nOutput:\n{test_result.output}\n\n"
                         )
                         # Add specific guidance for common errors
                         if "AttributeError" in test_result.output:
@@ -485,23 +484,15 @@ class IndependentCompiler:
                     )
                     if added_exports:
                         fix_prompt += (
-                            f"PROBLEM: You ADDED exports not in header: "
-                            f"{sorted(added_exports)}\n"
+                            f"PROBLEM: You ADDED exports not in header: {sorted(added_exports)}\n"
                         )
-                        fix_prompt += (
-                            "Remove these or make them private (prefix with _).\n\n"
-                        )
+                        fix_prompt += "Remove these or make them private (prefix with _).\n\n"
                     if removed_exports:
                         fix_prompt += (
-                            f"PROBLEM: You REMOVED exports from header: "
-                            f"{sorted(removed_exports)}\n"
+                            f"PROBLEM: You REMOVED exports from header: {sorted(removed_exports)}\n"
                         )
-                        fix_prompt += (
-                            "Add these back - don't remove from the header.\n\n"
-                        )
-                    fix_prompt += (
-                        "Implementation must have EXACTLY same exports as header."
-                    )
+                        fix_prompt += "Add these back - don't remove from the header.\n\n"
+                    fix_prompt += "Implementation must have EXACTLY same exports as header."
 
                     result = self.client.generate(fix_prompt, session_id)
                     total_duration += result.duration_seconds
@@ -668,15 +659,10 @@ class IndependentCompiler:
                     success=False,
                     error="Stopped due to fail-fast",
                 )
-            return self._compile_file_forked(
-                spec, context, language, base_session_id, detector
-            )
+            return self._compile_file_forked(spec, context, language, base_session_id, detector)
 
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
-            future_to_spec = {
-                executor.submit(compile_spec, spec): spec
-                for spec in specs
-            }
+            future_to_spec = {executor.submit(compile_spec, spec): spec for spec in specs}
 
             with tqdm(total=len(specs), desc="Compiling", unit="spec") as pbar:
                 for future in as_completed(future_to_spec):
@@ -847,8 +833,7 @@ class IndependentCompiler:
                     else:
                         cmd = f"python -m pytest {test_path} -v --tb=short"
                         fix_prompt = (
-                            f"Tests failed when running: {cmd}\n\n"
-                            f"Output:\n{test_result.output}\n\n"
+                            f"Tests failed when running: {cmd}\n\nOutput:\n{test_result.output}\n\n"
                         )
                         # Add specific guidance for common errors
                         if "AttributeError" in test_result.output:
@@ -919,23 +904,15 @@ class IndependentCompiler:
                     )
                     if added_exports:
                         fix_prompt += (
-                            f"PROBLEM: You ADDED exports not in header: "
-                            f"{sorted(added_exports)}\n"
+                            f"PROBLEM: You ADDED exports not in header: {sorted(added_exports)}\n"
                         )
-                        fix_prompt += (
-                            "Remove these or make them private (prefix with _).\n\n"
-                        )
+                        fix_prompt += "Remove these or make them private (prefix with _).\n\n"
                     if removed_exports:
                         fix_prompt += (
-                            f"PROBLEM: You REMOVED exports from header: "
-                            f"{sorted(removed_exports)}\n"
+                            f"PROBLEM: You REMOVED exports from header: {sorted(removed_exports)}\n"
                         )
-                        fix_prompt += (
-                            "Add these back - don't remove from the header.\n\n"
-                        )
-                    fix_prompt += (
-                        "Implementation must have EXACTLY same exports as header."
-                    )
+                        fix_prompt += "Add these back - don't remove from the header.\n\n"
+                    fix_prompt += "Implementation must have EXACTLY same exports as header."
 
                     result = self.client.generate(fix_prompt, forked_session_id)
                     total_duration += result.duration_seconds

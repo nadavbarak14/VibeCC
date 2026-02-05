@@ -193,10 +193,7 @@ class ImplementationGenerator:
             return self.generate_impl(spec, context, language)
 
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
-            future_to_spec = {
-                executor.submit(process_spec, spec): spec
-                for spec in specs
-            }
+            future_to_spec = {executor.submit(process_spec, spec): spec for spec in specs}
 
             with tqdm(total=len(specs), desc="Implementations", unit="spec") as pbar:
                 for future in as_completed(future_to_spec):
