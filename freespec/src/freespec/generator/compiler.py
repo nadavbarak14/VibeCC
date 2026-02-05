@@ -378,7 +378,10 @@ class IndependentCompiler:
         all_headers: dict[str, str],
         fail_fast: bool = False,
     ) -> CompileContext:
-        """Compile all spec files independently.
+        """Compile all spec files, forking from a shared instructions session.
+
+        Sends instructions once at the start, then forks for each spec
+        so each compilation starts fresh from the instructions state.
 
         Args:
             specs: Specs to compile (any order).
@@ -391,11 +394,233 @@ class IndependentCompiler:
         """
         context = CompileContext(config=config, all_headers=all_headers)
 
-        for spec in specs:
-            result = self.compile_file(spec, context)
+        if not specs:
+            return context
 
-            if fail_fast and not result.success:
+        # Send instructions once at the start
+        logger.info("Creating compilation session with instructions...")
+        self.client.set_current_spec("_compile_instructions")
+
+        instructions = self.prompt_builder.build_compile_instructions_prompt(
+            language=config.language,
+        )
+        result = self.client.generate(instructions)
+
+        if not result.success:
+            logger.error("Failed to create compilation session: %s", result.error)
+            # Fall back to independent compilation
+            logger.warning("Falling back to independent compilation")
+            for spec in specs:
+                compile_result = self.compile_file(spec, context)
+                if fail_fast and not compile_result.success:
+                    logger.warning("Stopping early due to --fail-fast")
+                    break
+            return context
+
+        base_session_id = result.session_id
+        logger.info("Compilation session created: %s", base_session_id[:8] + "...")
+
+        # Fork for each spec (each starts fresh from instructions)
+        for spec in specs:
+            compile_result = self._compile_file_forked(spec, context, base_session_id)
+
+            if fail_fast and not compile_result.success:
                 logger.warning("Stopping early due to --fail-fast")
                 break
 
         return context
+
+    def _compile_file_forked(
+        self,
+        spec: SpecFile,
+        context: CompileContext,
+        base_session_id: str,
+    ) -> CompileResult:
+        """Compile a spec file by forking from the instructions session.
+
+        Each file starts fresh from the instructions state.
+
+        Args:
+            spec: The spec to compile.
+            context: Compilation context with config and all headers.
+            base_session_id: Session ID to fork from.
+
+        Returns:
+            CompileResult indicating success/failure.
+        """
+        impl_path = self._get_impl_path(spec, context.config)
+        test_path = self._get_test_path(spec, context.config)
+
+        # Create output directories
+        impl_path.parent.mkdir(parents=True, exist_ok=True)
+        test_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Read original stub content and extract exports for validation
+        original_exports: set[str] = set()
+        if impl_path.exists():
+            original_content = impl_path.read_text()
+            original_exports = extract_public_exports(original_content)
+            logger.debug("  Original exports: %s", sorted(original_exports))
+
+        # Get file paths for @mentioned dependencies
+        dependency_paths = self._get_dependency_paths_for_spec(spec, context.config)
+
+        logger.info(
+            "Compiling %s (depends on: %s)",
+            spec.spec_id,
+            list(dependency_paths.keys()) or "none",
+        )
+
+        # Set current spec for logging
+        self.client.set_current_spec(spec.spec_id)
+
+        # Build minimal prompt - just the spec path and output paths
+        prompt = self._build_minimal_compile_prompt(spec, impl_path, test_path, dependency_paths)
+
+        # Fork from base session (starts fresh from instructions)
+        result = self.client.fork_session(base_session_id, prompt)
+        forked_session_id = result.session_id  # New session for this file
+        total_duration = result.duration_seconds
+        last_log_file = result.log_file
+
+        if not result.success:
+            logger.error("  Generation failed: %s", result.error)
+            compile_result = CompileResult(
+                spec_id=spec.spec_id,
+                success=False,
+                impl_path=impl_path,
+                test_path=test_path,
+                error=f"Generation failed: {result.error}",
+                duration_seconds=total_duration,
+                log_file=last_log_file,
+            )
+            context.results.append(compile_result)
+            return compile_result
+
+        # Review loop
+        runner = self._get_test_runner(context.config)
+        if hasattr(runner, "set_current_spec"):
+            runner.set_current_spec(spec.spec_id)
+
+        last_failure_reason = "Unknown failure"
+        review_attempts = 0
+        is_cpp = context.config.language.lower() in ("cpp", "c++")
+
+        for attempt in range(MAX_REVIEW_RETRIES):
+            # Verify files exist
+            if not impl_path.exists() or not test_path.exists():
+                logger.warning("  Files not written, asking to write them...")
+                last_failure_reason = "Files not written"
+                result = self.client.generate(
+                    "The files were not written. Please write them to the specified paths.",
+                    forked_session_id,
+                )
+                total_duration += result.duration_seconds
+                last_log_file = result.log_file or last_log_file
+                continue
+
+            # Run tests
+            if is_cpp:
+                test_result = runner.run_test(test_path, impl_path)
+            else:
+                test_result = runner.run_test(test_path)
+
+            if not test_result.success:
+                logger.warning(
+                    "  Tests failed (attempt %d/%d), asking to fix...",
+                    attempt + 1,
+                    MAX_REVIEW_RETRIES,
+                )
+                last_failure_reason = f"Tests failed:\n{test_result.output}"
+
+                if is_cpp:
+                    fix_prompt = (
+                        f"C++ compilation/tests failed.\n\n"
+                        f"Output:\n{test_result.output}\n\n"
+                        "Fix the code and ensure it compiles and tests pass."
+                    )
+                else:
+                    fix_prompt = (
+                        f"Tests failed when running: python -m pytest {test_path} -v --tb=short\n\n"
+                        f"Output:\n{test_result.output}\n\n"
+                        "Fix the code and run that exact command to verify."
+                    )
+                result = self.client.generate(fix_prompt, forked_session_id)
+                total_duration += result.duration_seconds
+                last_log_file = result.log_file or last_log_file
+                continue
+
+            # Tests passed - now REVIEW with export validation
+            logger.info("  Tests passed, running review...")
+            review_attempts += 1
+            review_prompt = self.prompt_builder.build_review_prompt(
+                spec,
+                impl_path,
+                test_path,
+                original_exports=original_exports if original_exports else None,
+            )
+            review_result = self.client.generate(review_prompt, forked_session_id)
+            total_duration += review_result.duration_seconds
+            last_log_file = review_result.log_file or last_log_file
+
+            if "REVIEW_PASSED" in review_result.output:
+                logger.info("  Review passed!")
+                compile_result = CompileResult(
+                    spec_id=spec.spec_id,
+                    success=True,
+                    impl_path=impl_path,
+                    test_path=test_path,
+                    duration_seconds=total_duration,
+                    log_file=last_log_file,
+                    review_attempts=review_attempts,
+                    review_passed=True,
+                )
+                context.results.append(compile_result)
+                return compile_result
+
+            # Review failed
+            last_failure_reason = f"Review failed: {review_result.output[:500]}"
+            logger.info(f"  Review failed (attempt {review_attempts}/{MAX_REVIEW_RETRIES})")
+
+        # All retries exhausted
+        logger.error("  Compilation failed after %d attempts", MAX_REVIEW_RETRIES)
+        compile_result = CompileResult(
+            spec_id=spec.spec_id,
+            success=False,
+            impl_path=impl_path,
+            test_path=test_path,
+            error=last_failure_reason,
+            duration_seconds=total_duration,
+            log_file=last_log_file,
+            review_attempts=review_attempts,
+            review_passed=False,
+        )
+        context.results.append(compile_result)
+        return compile_result
+
+    def _build_minimal_compile_prompt(
+        self,
+        spec: SpecFile,
+        impl_path: Path,
+        test_path: Path,
+        dependency_paths: dict[str, Path],
+    ) -> str:
+        """Build a minimal prompt for compiling a spec.
+
+        Just references the files - Claude will read them.
+        """
+        parts = [
+            f"Compile: {spec.spec_id}",
+            "",
+            f"Spec file: {spec.path}",
+            f"Stub file (modify in-place): {impl_path}",
+            f"Test file (create): {test_path}",
+        ]
+
+        if dependency_paths:
+            parts.append("")
+            parts.append("Dependencies to read if needed:")
+            for dep_id, dep_path in sorted(dependency_paths.items()):
+                parts.append(f"  - {dep_id}: {dep_path}")
+
+        return "\n".join(parts)

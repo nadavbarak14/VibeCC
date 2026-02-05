@@ -691,3 +691,127 @@ class PromptBuilder:
             parts.append("")
 
         return "\n".join(parts)
+
+    def build_compile_instructions_prompt(self, language: str) -> str:
+        """Build the instructions prompt for compilation.
+
+        This is sent once at the start of a compilation session.
+        It contains FreeSpec documentation and language-specific instructions,
+        but NOT the specs or headers (Claude will read files as needed).
+
+        Args:
+            language: Target programming language.
+
+        Returns:
+            Instructions prompt to send once at session start.
+        """
+        docs = self.load_docs()
+        lang_info = self._get_language_info(language)
+
+        prompt_parts = [
+            "# FreeSpec Compilation Instructions",
+            "",
+            "You are compiling FreeSpec specifications into working code.",
+            "I will give you specs to compile one at a time. Read files as needed.",
+            "",
+            "## FreeSpec Documentation",
+            "",
+            docs,
+            "",
+            "## Target Language",
+            "",
+            f"Language: {language.upper()}",
+            f"Test runner: {lang_info['test_runner']}",
+            f"Test command: {lang_info['test_command']}",
+            f"Implementation requirements: {lang_info['impl_requirements']}",
+            "",
+            "## Compilation Workflow",
+            "",
+            "For each spec I give you:",
+            "",
+            "1. READ the spec file to understand exports and tests",
+            "2. READ the existing stub file at the implementation path",
+            "3. READ any @mentioned dependencies if needed",
+            "4. Replace NotImplementedError() with working implementations",
+            "5. Write tests that verify the spec's test cases",
+            f"6. Run tests with {lang_info['test_command']} and iterate until all pass",
+            "",
+            "## Constraints",
+            "",
+            "- Do NOT add new public exports (classes, functions, constants)",
+            "- Do NOT modify function signatures or type hints",
+            "- ONLY replace NotImplementedError() with working code",
+            "- Private helpers (_prefix) ARE allowed",
+            "",
+            "Ready for compilation tasks.",
+        ]
+
+        return "\n".join(prompt_parts)
+
+    def build_header_instructions_prompt(self, language: str) -> str:
+        """Build the instructions prompt for header generation.
+
+        This is sent once at the start of a header generation session.
+        It contains FreeSpec documentation and language-specific instructions.
+
+        Args:
+            language: Target programming language.
+
+        Returns:
+            Instructions prompt to send once at session start.
+        """
+        docs = self.load_docs()
+        lang = language.lower()
+
+        if lang in ("cpp", "c++"):
+            lang_instructions = """
+## Language: C++
+
+Generate .hpp header files with:
+- Proper include guards
+- Function/method declarations (no implementation)
+- Class definitions with fields and method declarations
+- Modern C++ (C++17), std::string, std::optional, std::vector
+- Smart pointers where appropriate
+- Namespaces matching the category
+"""
+        else:
+            lang_instructions = """
+## Language: Python
+
+Generate Python stub files with:
+- Function/method signatures with complete type hints
+- Classes with all fields and method signatures
+- All methods raise NotImplementedError()
+- Dataclasses for entities with fields and types
+- Complete enum definitions
+- Docstrings for every function and class
+- Standard library types only (datetime, uuid, typing, etc.)
+"""
+
+        prompt_parts = [
+            "# FreeSpec Header Generation Instructions",
+            "",
+            "You are generating header/interface files from FreeSpec specifications.",
+            "I will give you specs to generate headers for one at a time.",
+            "",
+            "## FreeSpec Documentation",
+            "",
+            docs,
+            "",
+            lang_instructions,
+            "",
+            "## Header Generation Workflow",
+            "",
+            "For each spec I give you:",
+            "",
+            "1. Read the spec file to understand description and exports",
+            "2. Generate ONLY the interface/header file",
+            "3. Write the file to the specified output path",
+            "4. Do NOT generate implementation or tests",
+            "",
+            "Ready for header generation tasks.",
+        ]
+
+        return "\n".join(prompt_parts)
+

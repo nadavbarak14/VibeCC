@@ -123,7 +123,10 @@ class HeaderGenerator:
         specs: list[SpecFile],
         config: FreeSpecConfig,
     ) -> HeaderContext:
-        """Generate headers for all specs.
+        """Generate headers for all specs, forking from a shared instructions session.
+
+        Sends instructions once at the start, then forks for each header
+        so each generation starts fresh from the instructions state.
 
         Args:
             specs: Specs to generate headers for (any order is fine).
@@ -137,12 +140,95 @@ class HeaderGenerator:
         """
         context = HeaderContext(config=config)
 
+        if not specs:
+            return context
+
+        # Send instructions once at the start
+        logger.info("Creating header generation session with instructions...")
+        self.client.set_current_spec("_header_instructions")
+
+        instructions = self.prompt_builder.build_header_instructions_prompt(
+            language=config.language,
+        )
+        result = self.client.generate(instructions)
+
+        if not result.success:
+            logger.error("Failed to create header session: %s", result.error)
+            # Fall back to independent generation
+            logger.warning("Falling back to independent header generation")
+            for spec in specs:
+                header = self.generate_header(spec, config)
+                context.headers[spec.spec_id] = header.content
+                context.generated_files.append(header)
+            return context
+
+        base_session_id = result.session_id
+        logger.info("Header session created: %s", base_session_id[:8] + "...")
+
+        # Fork for each header (each starts fresh from instructions)
         for spec in specs:
-            header = self.generate_header(spec, config)
+            header = self._generate_header_forked(spec, config, base_session_id)
             context.headers[spec.spec_id] = header.content
             context.generated_files.append(header)
 
         return context
+
+    def _generate_header_forked(
+        self,
+        spec: SpecFile,
+        config: FreeSpecConfig,
+        base_session_id: str,
+    ) -> GeneratedHeader:
+        """Generate a header file by forking from the instructions session.
+
+        Each header starts fresh from the instructions state.
+
+        Args:
+            spec: The spec to generate a header for.
+            config: Project configuration.
+            base_session_id: Session ID to fork from.
+
+        Returns:
+            The generated header file info.
+
+        Raises:
+            HeaderGenerationError: If generation fails.
+        """
+        output_path = self._get_header_path(spec, config)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+
+        # Set current spec for logging
+        self.client.set_current_spec(f"header_{spec.spec_id}")
+
+        # Build minimal prompt - just references the spec file
+        prompt = f"Generate header for: {spec.spec_id}\n\nSpec file: {spec.path}\nOutput: {output_path}"
+
+        logger.info("Generating header for %s -> %s", spec.spec_id, output_path)
+        result = self.client.fork_session(base_session_id, prompt)
+
+        if not result.success:
+            raise HeaderGenerationError(
+                f"Failed to generate header for {spec.spec_id}: {result.error}"
+            )
+
+        # Read the generated file content
+        if output_path.exists():
+            content = output_path.read_text()
+        else:
+            # LLM might have written content differently, extract from output
+            content = self._extract_code_from_output(result.output)
+            if content:
+                output_path.write_text(content)
+            else:
+                raise HeaderGenerationError(
+                    f"Generated header not found at {output_path} and couldn't extract from output"
+                )
+
+        return GeneratedHeader(
+            spec_id=spec.spec_id,
+            path=output_path,
+            content=content,
+        )
 
     def _get_header_ext(self, config: FreeSpecConfig) -> str:
         """Get header file extension for the target language."""

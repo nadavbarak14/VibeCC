@@ -77,15 +77,57 @@ class ClaudeCodeClient:
         Returns:
             GenerationResult with success status, output, and session_id for continuation.
         """
+        return self._generate_internal(prompt, session_id, fork=False)
+
+    def fork_session(self, session_id: str, prompt: str) -> GenerationResult:
+        """Fork from an existing session and continue with new prompt.
+
+        Creates a new session branching from the specified session point.
+        The original session remains unchanged; a new session ID is generated
+        for the fork.
+
+        Args:
+            session_id: Session ID to fork from.
+            prompt: The prompt for the forked session.
+
+        Returns:
+            GenerationResult with success status, output, and new session_id for the fork.
+        """
+        return self._generate_internal(prompt, session_id, fork=True)
+
+    def _generate_internal(
+        self, prompt: str, session_id: str | None, fork: bool
+    ) -> GenerationResult:
+        """Internal method for code generation with optional forking.
+
+        Args:
+            prompt: The prompt describing what to generate.
+            session_id: Session ID for resume or fork operations.
+            fork: If True, fork from session_id instead of resuming.
+
+        Returns:
+            GenerationResult with success status, output, and session_id.
+        """
         logger.debug("Generating with prompt (%d chars)", len(prompt))
         start_time = time.time()
 
-        # Generate or use existing session ID
-        effective_session_id = session_id or str(uuid.uuid4())
-        is_resume = session_id is not None
+        # For forking, we need a new session ID for the fork
+        # For resume, we use the existing session ID
+        # For new sessions, we generate a new ID
+        if fork:
+            # Fork creates a new session branching from the parent
+            effective_session_id = str(uuid.uuid4())
+            parent_session_id = session_id
+        else:
+            effective_session_id = session_id or str(uuid.uuid4())
+            parent_session_id = None
+
+        is_resume = session_id is not None and not fork
 
         try:
-            result = self._run_claude(prompt, effective_session_id, is_resume)
+            result = self._run_claude(
+                prompt, effective_session_id, is_resume, fork, parent_session_id
+            )
             duration = time.time() - start_time
             result.duration_seconds = duration
 
@@ -185,19 +227,37 @@ class ClaudeCodeClient:
         return log_file
 
     def _run_claude(
-        self, prompt: str, session_id: str, is_resume: bool = False
+        self,
+        prompt: str,
+        session_id: str,
+        is_resume: bool = False,
+        is_fork: bool = False,
+        parent_session_id: str | None = None,
     ) -> GenerationResult:
         """Run the Claude Code CLI subprocess.
 
         Args:
             prompt: The prompt to send.
-            session_id: Session ID for the conversation.
-            is_resume: If True, resume an existing session; if False, start new session.
+            session_id: Session ID for the conversation (new ID for forks).
+            is_resume: If True, resume an existing session.
+            is_fork: If True, fork from parent_session_id.
+            parent_session_id: Session to fork from (required if is_fork=True).
 
         Returns:
             GenerationResult based on execution.
         """
-        if is_resume:
+        if is_fork and parent_session_id:
+            # Fork from existing session
+            cmd = [
+                "claude",
+                "--resume",
+                parent_session_id,
+                "--fork-session",
+                "-p",
+                prompt,
+                "--dangerously-skip-permissions",
+            ]
+        elif is_resume:
             # Continue existing session
             cmd = [
                 "claude",
