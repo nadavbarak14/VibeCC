@@ -7,8 +7,12 @@ circular @mentions to be resolved since all interfaces are available.
 from __future__ import annotations
 
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from tqdm import tqdm
 
 from freespec.config import FreeSpecConfig
 from freespec.generator.prompts import PromptBuilder
@@ -131,6 +135,7 @@ class ImplementationGenerator:
         config: FreeSpecConfig,
         all_headers: dict[str, str],
         language: str,
+        num_workers: int = 1,
     ) -> ImplContext:
         """Generate implementations for all specs.
 
@@ -139,6 +144,7 @@ class ImplementationGenerator:
             config: Project configuration.
             all_headers: Map of all spec_id to their header content.
             language: Target language (python, cpp).
+            num_workers: Number of parallel workers (1 = sequential).
 
         Returns:
             Context with all generated implementations.
@@ -148,8 +154,68 @@ class ImplementationGenerator:
         """
         context = ImplContext(config=config, all_headers=all_headers)
 
-        for spec in specs:
+        if not specs:
+            return context
+
+        if num_workers > 1 and len(specs) > 1:
+            return self._generate_impls_parallel(specs, context, language, num_workers)
+
+        for spec in tqdm(specs, desc="Implementations", unit="spec", disable=len(specs) <= 1):
             self.generate_impl(spec, context, language)
+
+        return context
+
+    def _generate_impls_parallel(
+        self,
+        specs: list[SpecFile],
+        context: ImplContext,
+        language: str,
+        num_workers: int,
+    ) -> ImplContext:
+        """Generate implementations in parallel using ThreadPoolExecutor.
+
+        Args:
+            specs: Specs to generate implementations for.
+            context: Implementation context to populate.
+            language: Target language.
+            num_workers: Number of parallel workers.
+
+        Returns:
+            Context with all generated implementations.
+
+        Raises:
+            ImplementationError: If any generation fails.
+        """
+        results_lock = threading.Lock()
+        first_error: ImplementationError | None = None
+
+        def process_spec(spec: SpecFile) -> GeneratedImpl:
+            return self.generate_impl(spec, context, language)
+
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+            future_to_spec = {
+                executor.submit(process_spec, spec): spec
+                for spec in specs
+            }
+
+            with tqdm(total=len(specs), desc="Implementations", unit="spec") as pbar:
+                for future in as_completed(future_to_spec):
+                    spec = future_to_spec[future]
+                    try:
+                        impl = future.result()
+                        with results_lock:
+                            context.generated_code[spec.spec_id] = impl.content
+                            context.generated_files.append(impl)
+                    except ImplementationError as e:
+                        if first_error is None:
+                            first_error = e
+                        logger.error("Failed to generate impl for %s: %s", spec.spec_id, e)
+                    finally:
+                        pbar.update(1)
+                        pbar.set_postfix(last=spec.spec_id[:20])
+
+        if first_error is not None:
+            raise first_error
 
         return context
 

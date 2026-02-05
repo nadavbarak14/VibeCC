@@ -7,6 +7,7 @@ making it easy to investigate what happened during a build.
 from __future__ import annotations
 
 import json
+import threading
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -96,6 +97,7 @@ class SessionLogger:
         self._interaction_count = 0
         self._current_spec_id: str | None = None
         self._current_phase: str = "other"
+        self._write_lock = threading.Lock()
 
         # Write initial header to text log
         self._write_text_header()
@@ -133,6 +135,8 @@ class SessionLogger:
         parent_session_id: str | None = None,
         attempt: int | None = None,
         metadata: dict[str, Any] | None = None,
+        spec_id: str | None = None,
+        phase: str | None = None,
     ) -> None:
         """Log a single interaction with Claude Code.
 
@@ -147,32 +151,35 @@ class SessionLogger:
             parent_session_id: Parent session ID for forks.
             attempt: Attempt number for retries.
             metadata: Additional metadata to log.
+            spec_id: Override spec_id (for thread-safe logging).
+            phase: Override phase (for thread-safe logging).
         """
-        self._interaction_count += 1
+        with self._write_lock:
+            self._interaction_count += 1
 
-        record = InteractionRecord(
-            timestamp=datetime.now(timezone.utc).isoformat(),
-            interaction_type=interaction_type,
-            phase=self._current_phase,
-            spec_id=self._current_spec_id,
-            prompt=prompt,
-            output=output,
-            success=success,
-            error=error,
-            duration_seconds=duration_seconds,
-            session_id=session_id,
-            parent_session_id=parent_session_id,
-            attempt=attempt,
-            metadata=metadata or {},
-        )
+            record = InteractionRecord(
+                timestamp=datetime.now(timezone.utc).isoformat(),
+                interaction_type=interaction_type,
+                phase=phase if phase is not None else self._current_phase,
+                spec_id=spec_id if spec_id is not None else self._current_spec_id,
+                prompt=prompt,
+                output=output,
+                success=success,
+                error=error,
+                duration_seconds=duration_seconds,
+                session_id=session_id,
+                parent_session_id=parent_session_id,
+                attempt=attempt,
+                metadata=metadata or {},
+            )
 
-        self.session_log.interactions.append(record)
+            self.session_log.interactions.append(record)
 
-        # Append to text log
-        self._append_text_log(record)
+            # Append to text log
+            self._append_text_log(record)
 
-        # Update JSON log (rewrite entire file for atomicity)
-        self._save_json_log()
+            # Update JSON log (rewrite entire file for atomicity)
+            self._save_json_log()
 
     def _append_text_log(self, record: InteractionRecord) -> None:
         """Append an interaction record to the text log."""
@@ -229,34 +236,35 @@ class SessionLogger:
             total_duration_seconds: Total duration of the session.
             extra: Additional summary data.
         """
-        self.session_log.summary = {
-            "session_end": datetime.now(timezone.utc).isoformat(),
-            "total_specs": total_specs,
-            "successful_specs": successful_specs,
-            "failed_specs": failed_specs,
-            "total_interactions": self._interaction_count,
-            "total_duration_seconds": total_duration_seconds,
-            **(extra or {}),
-        }
+        with self._write_lock:
+            self.session_log.summary = {
+                "session_end": datetime.now(timezone.utc).isoformat(),
+                "total_specs": total_specs,
+                "successful_specs": successful_specs,
+                "failed_specs": failed_specs,
+                "total_interactions": self._interaction_count,
+                "total_duration_seconds": total_duration_seconds,
+                **(extra or {}),
+            }
 
-        # Write summary to text log
-        with open(self.text_log_path, "a") as f:
-            f.write(f"\n{'=' * 100}\n")
-            f.write("SESSION SUMMARY\n")
-            f.write(f"{'=' * 100}\n\n")
-            f.write(f"Session End:        {self.session_log.summary['session_end']}\n")
-            f.write(f"Total Specs:        {total_specs}\n")
-            f.write(f"Successful:         {successful_specs}\n")
-            f.write(f"Failed:             {failed_specs}\n")
-            f.write(f"Total Interactions: {self._interaction_count}\n")
-            f.write(f"Total Duration:     {total_duration_seconds:.2f}s\n")
-            if extra:
-                for key, value in extra.items():
-                    f.write(f"{key}: {value}\n")
-            f.write("\n")
+            # Write summary to text log
+            with open(self.text_log_path, "a") as f:
+                f.write(f"\n{'=' * 100}\n")
+                f.write("SESSION SUMMARY\n")
+                f.write(f"{'=' * 100}\n\n")
+                f.write(f"Session End:        {self.session_log.summary['session_end']}\n")
+                f.write(f"Total Specs:        {total_specs}\n")
+                f.write(f"Successful:         {successful_specs}\n")
+                f.write(f"Failed:             {failed_specs}\n")
+                f.write(f"Total Interactions: {self._interaction_count}\n")
+                f.write(f"Total Duration:     {total_duration_seconds:.2f}s\n")
+                if extra:
+                    for key, value in extra.items():
+                        f.write(f"{key}: {value}\n")
+                f.write("\n")
 
-        # Save final JSON
-        self._save_json_log()
+            # Save final JSON
+            self._save_json_log()
 
     def get_log_paths(self) -> tuple[Path, Path]:
         """Get the paths to the log files.

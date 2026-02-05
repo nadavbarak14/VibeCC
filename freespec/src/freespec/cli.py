@@ -74,7 +74,14 @@ def main() -> None:
     is_flag=True,
     help="Enable verbose output",
 )
-def headers(config_path: Path | None, language: str, verbose: bool) -> None:
+@click.option(
+    "--workers",
+    "num_workers",
+    type=int,
+    default=None,
+    help="Number of parallel Claude instances (default: from config or 4)",
+)
+def headers(config_path: Path | None, language: str, verbose: bool, num_workers: int | None) -> None:
     """Generate header/interface files (Pass 1).
 
     Headers are generated independently without dependency ordering.
@@ -127,8 +134,9 @@ def headers(config_path: Path | None, language: str, verbose: bool) -> None:
 
         # Generate headers
         click.echo("\nGenerating headers (Pass 1)...")
+        workers = num_workers if num_workers is not None else config.settings.parallelism
         generator = HeaderGenerator(client=client)
-        context = generator.generate_all_headers(specs, config, language)
+        context = generator.generate_all_headers(specs, config, language, num_workers=workers)
 
         click.echo(f"  Generated {len(context.generated_files)} header files")
         click.echo(f"\nHeaders written to: {config.get_src_path(language)}")
@@ -170,7 +178,14 @@ def headers(config_path: Path | None, language: str, verbose: bool) -> None:
     is_flag=True,
     help="Enable verbose output",
 )
-def impl(config_path: Path | None, language: str, no_verify: bool, verbose: bool) -> None:
+@click.option(
+    "--workers",
+    "num_workers",
+    type=int,
+    default=None,
+    help="Number of parallel Claude instances (default: from config or 4)",
+)
+def impl(config_path: Path | None, language: str, no_verify: bool, verbose: bool, num_workers: int | None) -> None:
     """Generate implementation files (Pass 2).
 
     Requires headers to be generated first. Uses all headers as context
@@ -217,8 +232,9 @@ def impl(config_path: Path | None, language: str, no_verify: bool, verbose: bool
 
         # Generate implementations
         click.echo("\nGenerating implementations (Pass 2)...")
+        workers = num_workers if num_workers is not None else config.settings.parallelism
         generator = ImplementationGenerator(client=client)
-        context = generator.generate_all_impls(specs, config, all_headers, language)
+        context = generator.generate_all_impls(specs, config, all_headers, language, num_workers=workers)
 
         click.echo(f"  Generated {len(context.generated_files)} implementation files")
 
@@ -401,14 +417,21 @@ def _load_implementations(config: FreeSpecConfig, language: str) -> dict[str, st
     help="Target language (default: python)",
 )
 @click.option(
-    "--fail-fast",
+    "--no-fail-fast",
     is_flag=True,
-    help="Stop on first module failure",
+    help="Continue compiling other specs even if one fails",
 )
 @click.option(
     "--force",
     is_flag=True,
     help="Force full rebuild, ignore manifest",
+)
+@click.option(
+    "--workers",
+    "num_workers",
+    type=int,
+    default=None,
+    help="Number of parallel Claude instances (default: from config or 4)",
 )
 @click.option(
     "-v",
@@ -441,8 +464,9 @@ def _load_implementations(config: FreeSpecConfig, language: str) -> dict[str, st
 def compile(
     config_path: Path | None,
     language: str,
-    fail_fast: bool,
+    no_fail_fast: bool,
     force: bool,
+    num_workers: int | None,
     verbose: bool,
     dry_run: bool,
     skip_headers: bool,
@@ -597,9 +621,10 @@ def compile(
             header_specs = [s for s in specs if s.spec_id in detection.header_specs]
             if header_specs:
                 click.echo(f"\nStage 3: Generating headers for {len(header_specs)} spec(s)...")
+                workers = num_workers if num_workers is not None else config.settings.parallelism
                 header_generator = HeaderGenerator(client=client)
                 header_context = header_generator.generate_all_headers(
-                    header_specs, config, language, detector=detector
+                    header_specs, config, language, detector=detector, num_workers=workers
                 )
                 all_headers = header_context.headers
                 click.echo(f"  Generated {len(header_context.generated_files)} header files")
@@ -618,6 +643,8 @@ def compile(
 
         if impl_specs:
             click.echo(f"\nStage 4: Independent compilation of {len(impl_specs)} spec(s)...")
+            workers = num_workers if num_workers is not None else config.settings.parallelism
+            fail_fast = not no_fail_fast
             compiler = IndependentCompiler(client=client)
             compile_context = compiler.compile_all(
                 specs=impl_specs,
@@ -626,6 +653,7 @@ def compile(
                 language=language,
                 fail_fast=fail_fast,
                 detector=detector,
+                num_workers=workers,
             )
 
             # Report results

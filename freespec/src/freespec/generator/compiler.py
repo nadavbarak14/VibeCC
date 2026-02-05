@@ -9,9 +9,13 @@ implementation, with retries on failure.
 from __future__ import annotations
 
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from tqdm import tqdm
 
 from freespec.config import FreeSpecConfig
 from freespec.generator.cpp_runner import CppTestRunner
@@ -417,8 +421,9 @@ class IndependentCompiler:
         config: FreeSpecConfig,
         all_headers: dict[str, str],
         language: str,
-        fail_fast: bool = False,
+        fail_fast: bool = True,
         detector: RebuildDetector | None = None,
+        num_workers: int = 1,
     ) -> CompileContext:
         """Compile all spec files, forking from a shared instructions session.
 
@@ -430,8 +435,9 @@ class IndependentCompiler:
             config: Project configuration.
             all_headers: Map of all spec_id to their header content.
             language: Target language (python, cpp).
-            fail_fast: Stop on first module failure.
+            fail_fast: Stop on first module failure (default: True).
             detector: Optional rebuild detector to update manifest.
+            num_workers: Number of parallel workers (1 = sequential).
 
         Returns:
             CompileContext with all results.
@@ -458,22 +464,101 @@ class IndependentCompiler:
             for spec in specs:
                 compile_result = self.compile_file(spec, context, language, detector)
                 if fail_fast and not compile_result.success:
-                    logger.warning("Stopping early due to --fail-fast")
+                    logger.warning("Stopping early due to fail-fast")
                     break
             return context
 
         base_session_id = result.session_id
         logger.info("Compilation session created: %s", base_session_id[:8] + "...")
 
-        # Fork for each spec (each starts fresh from instructions)
-        for spec in specs:
+        # Use parallel or sequential based on num_workers
+        if num_workers > 1 and len(specs) > 1:
+            return self._compile_parallel(
+                specs, context, language, base_session_id, fail_fast, detector, num_workers
+            )
+
+        # Sequential: Fork for each spec (each starts fresh from instructions)
+        for spec in tqdm(specs, desc="Compiling", unit="spec", disable=len(specs) <= 1):
             compile_result = self._compile_file_forked(
                 spec, context, language, base_session_id, detector
             )
 
             if fail_fast and not compile_result.success:
-                logger.warning("Stopping early due to --fail-fast")
+                logger.warning("Stopping early due to fail-fast")
                 break
+
+        return context
+
+    def _compile_parallel(
+        self,
+        specs: list[SpecFile],
+        context: CompileContext,
+        language: str,
+        base_session_id: str,
+        fail_fast: bool,
+        detector: RebuildDetector | None,
+        num_workers: int,
+    ) -> CompileContext:
+        """Compile specs in parallel using ThreadPoolExecutor.
+
+        Args:
+            specs: Specs to compile.
+            context: Compilation context.
+            language: Target language.
+            base_session_id: Session ID to fork from.
+            fail_fast: Stop on first failure.
+            detector: Optional rebuild detector.
+            num_workers: Number of parallel workers.
+
+        Returns:
+            CompileContext with all results.
+        """
+        results_lock = threading.Lock()
+        stop_event = threading.Event()
+
+        def compile_spec(spec: SpecFile) -> CompileResult:
+            if stop_event.is_set():
+                return CompileResult(
+                    spec_id=spec.spec_id,
+                    success=False,
+                    error="Stopped due to fail-fast",
+                )
+            return self._compile_file_forked(
+                spec, context, language, base_session_id, detector
+            )
+
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+            future_to_spec = {
+                executor.submit(compile_spec, spec): spec
+                for spec in specs
+            }
+
+            with tqdm(total=len(specs), desc="Compiling", unit="spec") as pbar:
+                for future in as_completed(future_to_spec):
+                    spec = future_to_spec[future]
+                    try:
+                        result = future.result()
+                        with results_lock:
+                            context.results.append(result)
+
+                        if fail_fast and not result.success:
+                            logger.warning("Setting stop flag due to fail-fast")
+                            stop_event.set()
+                    except Exception as e:
+                        logger.error("Compilation failed for %s: %s", spec.spec_id, e)
+                        with results_lock:
+                            context.results.append(
+                                CompileResult(
+                                    spec_id=spec.spec_id,
+                                    success=False,
+                                    error=str(e),
+                                )
+                            )
+                        if fail_fast:
+                            stop_event.set()
+                    finally:
+                        pbar.update(1)
+                        pbar.set_postfix(last=spec.spec_id[:20])
 
         return context
 

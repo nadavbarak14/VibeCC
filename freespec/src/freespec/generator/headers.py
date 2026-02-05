@@ -8,9 +8,13 @@ each other's code.
 from __future__ import annotations
 
 import logging
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from tqdm import tqdm
 
 from freespec.config import FreeSpecConfig
 from freespec.generator.prompts import PromptBuilder
@@ -137,6 +141,7 @@ class HeaderGenerator:
         config: FreeSpecConfig,
         language: str,
         detector: RebuildDetector | None = None,
+        num_workers: int = 1,
     ) -> HeaderContext:
         """Generate headers for all specs, forking from a shared instructions session.
 
@@ -148,6 +153,7 @@ class HeaderGenerator:
             config: Project configuration.
             language: Target language (python, cpp).
             detector: Optional rebuild detector to update manifest.
+            num_workers: Number of parallel workers (1 = sequential).
 
         Returns:
             Context with all generated headers.
@@ -183,11 +189,79 @@ class HeaderGenerator:
         base_session_id = result.session_id
         logger.info("Header session created: %s", base_session_id[:8] + "...")
 
-        # Fork for each header (each starts fresh from instructions)
-        for spec in specs:
+        # Use parallel or sequential based on num_workers
+        if num_workers > 1 and len(specs) > 1:
+            return self._generate_headers_parallel(
+                specs, config, language, base_session_id, detector, context, num_workers
+            )
+
+        # Sequential: Fork for each header (each starts fresh from instructions)
+        for spec in tqdm(specs, desc="Headers", unit="spec", disable=len(specs) <= 1):
             header = self._generate_header_forked(spec, config, language, base_session_id, detector)
             context.headers[spec.spec_id] = header.content
             context.generated_files.append(header)
+
+        return context
+
+    def _generate_headers_parallel(
+        self,
+        specs: list[SpecFile],
+        config: FreeSpecConfig,
+        language: str,
+        base_session_id: str,
+        detector: RebuildDetector | None,
+        context: HeaderContext,
+        num_workers: int,
+    ) -> HeaderContext:
+        """Generate headers in parallel using ThreadPoolExecutor.
+
+        Args:
+            specs: Specs to generate headers for.
+            config: Project configuration.
+            language: Target language.
+            base_session_id: Session ID to fork from.
+            detector: Optional rebuild detector.
+            context: Header context to populate.
+            num_workers: Number of parallel workers.
+
+        Returns:
+            Context with all generated headers.
+
+        Raises:
+            HeaderGenerationError: If any generation fails.
+        """
+        results_lock = threading.Lock()
+        first_error: HeaderGenerationError | None = None
+
+        def process_spec(spec: SpecFile) -> GeneratedHeader:
+            return self._generate_header_forked(
+                spec, config, language, base_session_id, detector
+            )
+
+        with ThreadPoolExecutor(max_workers=num_workers) as executor:
+            future_to_spec = {
+                executor.submit(process_spec, spec): spec
+                for spec in specs
+            }
+
+            with tqdm(total=len(specs), desc="Headers", unit="spec") as pbar:
+                for future in as_completed(future_to_spec):
+                    spec = future_to_spec[future]
+                    try:
+                        header = future.result()
+                        with results_lock:
+                            context.headers[spec.spec_id] = header.content
+                            context.generated_files.append(header)
+                    except HeaderGenerationError as e:
+                        if first_error is None:
+                            first_error = e
+                        logger.error("Failed to generate header for %s: %s", spec.spec_id, e)
+                    finally:
+                        pbar.update(1)
+                        pbar.set_postfix(last=spec.spec_id[:20])
+
+        if first_error is not None:
+            raise first_error
 
         return context
 
