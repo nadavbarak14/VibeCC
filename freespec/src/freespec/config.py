@@ -35,6 +35,7 @@ class SettingsConfig:
 
     interactive: bool = True
     test_coverage: str = "high"
+    parallelism: int = 4
 
 
 @dataclass
@@ -83,6 +84,7 @@ class FreeSpecConfig:
         settings = SettingsConfig(
             interactive=settings_data.get("interactive", True),
             test_coverage=settings_data.get("test_coverage", "high"),
+            parallelism=settings_data.get("parallelism", 4),
         )
 
         return cls(
