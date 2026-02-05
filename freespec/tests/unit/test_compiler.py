@@ -526,8 +526,9 @@ class TestIndependentCompiler:
         test_path = compiler._get_test_path(spec, config, TEST_LANGUAGE)
         impl_path.parent.mkdir(parents=True, exist_ok=True)
         test_path.parent.mkdir(parents=True, exist_ok=True)
-        impl_path.write_text("code")
-        test_path.write_text("test")
+        # Write valid Python code that can be imported
+        impl_path.write_text("class EnrollmentService:\n    pass\n")
+        test_path.write_text("def test_enrollment():\n    pass\n")
 
         compiler.compile_file(spec, context, TEST_LANGUAGE)
 
@@ -563,14 +564,15 @@ class TestIndependentCompiler:
             test_runner=mock_runner,
         )
 
-        # Create all output directories and files
+        # Create all output directories and files with valid Python code
         for spec in specs:
             impl_path = compiler._get_impl_path(spec, config, TEST_LANGUAGE)
             test_path = compiler._get_test_path(spec, config, TEST_LANGUAGE)
             impl_path.parent.mkdir(parents=True, exist_ok=True)
             test_path.parent.mkdir(parents=True, exist_ok=True)
-            impl_path.write_text("code")
-            test_path.write_text("test")
+            # Write valid Python code that can be imported
+            impl_path.write_text(f"class {spec.name.title()}:\n    pass\n")
+            test_path.write_text(f"def test_{spec.name}():\n    pass\n")
 
         context = compiler.compile_all(specs, config, all_headers, TEST_LANGUAGE)
 

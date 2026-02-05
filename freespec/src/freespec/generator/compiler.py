@@ -203,6 +203,65 @@ class IndependentCompiler:
 
         return None
 
+    def _validate_module_import(
+        self,
+        impl_path: Path,
+        config: FreeSpecConfig,
+        language: str,
+    ) -> str | None:
+        """Validate that a module can be imported without errors.
+
+        This catches issues like accessing non-existent fields on dependencies
+        at import time (e.g., module-level code).
+
+        Args:
+            impl_path: Path to the implementation file.
+            config: Project configuration.
+            language: Target language.
+
+        Returns:
+            Error message if import failed, None if successful.
+        """
+        import subprocess
+        import sys
+
+        if language.lower() != "python":
+            return None  # Only validate Python modules
+
+        # Build the module import path
+        # e.g., out/python/src/entities/student.py -> src.entities.student
+        rel_parts = impl_path.parts
+        if "src" in rel_parts:
+            src_idx = rel_parts.index("src")
+            module_parts = rel_parts[src_idx:-1] + (impl_path.stem,)
+            module_name = ".".join(module_parts)
+        else:
+            return None  # Can't determine module path
+
+        # Run import in subprocess to avoid polluting our namespace
+        src_dir = config.get_src_path(language).parent  # Go to out/python/ level
+        cmd = [
+            sys.executable,
+            "-c",
+            f"import sys; sys.path.insert(0, '{src_dir}'); import {module_name}",
+        ]
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=30,
+                cwd=config.root_path,
+            )
+            if result.returncode != 0:
+                return result.stderr or result.stdout or "Unknown import error"
+            return None
+        except subprocess.TimeoutExpired:
+            return "Import timed out"
+        except Exception as e:
+            return str(e)
+
     def compile_file(
         self,
         spec: SpecFile,
@@ -356,14 +415,47 @@ class IndependentCompiler:
                         fix_prompt = (
                             f"Tests failed when running: {cmd}\n\n"
                             f"Output:\n{test_result.output}\n\n"
-                            "Fix the code and run that exact command to verify."
                         )
+                        # Add specific guidance for common errors
+                        if "AttributeError" in test_result.output:
+                            fix_prompt += (
+                                "\n**AttributeError detected!** You used a field or method that doesn't exist.\n"
+                                "READ the dependency file to see what fields/methods are actually available.\n"
+                                "Do NOT guess - check the actual source code.\n\n"
+                            )
+                        if "TypeError" in test_result.output and "argument" in test_result.output:
+                            fix_prompt += (
+                                "\n**TypeError detected!** You called a function with wrong arguments.\n"
+                                "READ the dependency file to see the correct function signature.\n"
+                                "Do NOT guess - check the actual source code.\n\n"
+                            )
+                        fix_prompt += "Fix the code and run that exact command to verify."
                     result = self.client.generate(fix_prompt, session_id)
                     total_duration += result.duration_seconds
                     last_log_file = result.log_file or last_log_file
                     continue
 
-            # Tests passed (or no tests defined) - validate exports programmatically
+            # Tests passed (or no tests defined) - validate module can be imported
+            if not is_cpp and impl_path.exists():
+                import_error = self._validate_module_import(impl_path, context.config, language)
+                if import_error:
+                    logger.warning("  Module import validation failed: %s", import_error[:200])
+                    last_failure_reason = f"Import validation failed: {import_error}"
+                    self.client.set_current_phase("fix")
+                    fix_prompt = (
+                        f"Module import validation FAILED.\n\n"
+                        f"Error: {import_error}\n\n"
+                        "This usually means you're using a field, method, or class that doesn't exist.\n"
+                        "READ the dependency files to see what's actually available.\n"
+                        "Do NOT guess - check the actual source code.\n\n"
+                        "Fix the implementation and ensure the module can be imported cleanly."
+                    )
+                    result = self.client.generate(fix_prompt, session_id)
+                    total_duration += result.duration_seconds
+                    last_log_file = result.log_file or last_log_file
+                    continue
+
+            # Validate exports programmatically
             if original_exports and impl_path.exists():
                 current_content = impl_path.read_text()
                 current_exports = extract_public_exports(current_content)
@@ -739,14 +831,47 @@ class IndependentCompiler:
                         fix_prompt = (
                             f"Tests failed when running: {cmd}\n\n"
                             f"Output:\n{test_result.output}\n\n"
-                            "Fix the code and run that exact command to verify."
                         )
+                        # Add specific guidance for common errors
+                        if "AttributeError" in test_result.output:
+                            fix_prompt += (
+                                "\n**AttributeError detected!** You used a field or method that doesn't exist.\n"
+                                "READ the dependency file to see what fields/methods are actually available.\n"
+                                "Do NOT guess - check the actual source code.\n\n"
+                            )
+                        if "TypeError" in test_result.output and "argument" in test_result.output:
+                            fix_prompt += (
+                                "\n**TypeError detected!** You called a function with wrong arguments.\n"
+                                "READ the dependency file to see the correct function signature.\n"
+                                "Do NOT guess - check the actual source code.\n\n"
+                            )
+                        fix_prompt += "Fix the code and run that exact command to verify."
                     result = self.client.generate(fix_prompt, forked_session_id)
                     total_duration += result.duration_seconds
                     last_log_file = result.log_file or last_log_file
                     continue
 
-            # Tests passed (or no tests defined) - validate exports programmatically
+            # Tests passed (or no tests defined) - validate module can be imported
+            if not is_cpp and impl_path.exists():
+                import_error = self._validate_module_import(impl_path, context.config, language)
+                if import_error:
+                    logger.warning("  Module import validation failed: %s", import_error[:200])
+                    last_failure_reason = f"Import validation failed: {import_error}"
+                    self.client.set_current_phase("fix")
+                    fix_prompt = (
+                        f"Module import validation FAILED.\n\n"
+                        f"Error: {import_error}\n\n"
+                        "This usually means you're using a field, method, or class that doesn't exist.\n"
+                        "READ the dependency files to see what's actually available.\n"
+                        "Do NOT guess - check the actual source code.\n\n"
+                        "Fix the implementation and ensure the module can be imported cleanly."
+                    )
+                    result = self.client.generate(fix_prompt, forked_session_id)
+                    total_duration += result.duration_seconds
+                    last_log_file = result.log_file or last_log_file
+                    continue
+
+            # Validate exports programmatically
             if original_exports and impl_path.exists():
                 current_content = impl_path.read_text()
                 current_exports = extract_public_exports(current_content)
