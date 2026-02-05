@@ -129,19 +129,32 @@ class TestHeaderGenerator:
             make_spec("course", "entities"),
         ]
 
+        # Create output directories
+        output_dir = tmp_path / "out/python/src/entities"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Mock client that also writes files (simulating real behavior)
+        def mock_fork_session(session_id, prompt):
+            # Extract output path from prompt and write file
+            if "student" in prompt:
+                (output_dir / "student.py").write_text("class Student:\n    pass\n")
+            elif "course" in prompt:
+                (output_dir / "course.py").write_text("class Course:\n    pass\n")
+            return GenerationResult(
+                success=True,
+                output="REVIEW_PASSED",
+                error=None,
+                session_id="forked-session",
+            )
+
         mock_client = MagicMock()
         mock_client.generate.return_value = GenerationResult(
             success=True,
-            output="```python\nclass Entity:\n    pass\n```",
+            output="Ready for headers",
             error=None,
             session_id="test-session",
         )
-        mock_client.fork_session.return_value = GenerationResult(
-            success=True,
-            output="```python\nclass Entity:\n    pass\n```",
-            error=None,
-            session_id="forked-session",
-        )
+        mock_client.fork_session.side_effect = mock_fork_session
 
         generator = HeaderGenerator(client=mock_client)
         context = generator.generate_all_headers(specs, config, TEST_LANGUAGE)

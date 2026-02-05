@@ -99,29 +99,35 @@ class PromptBuilder:
         else:  # Python
             prompt_parts.extend(
                 [
-                    "Requirements:",
+                    "## CRITICAL RULES - FOLLOW EXACTLY",
+                    "",
+                    "1. **NO ABSTRACT CLASSES**: Never use ABC, abstractmethod, or Protocol",
+                    "2. **ONLY EXPORTS**: Include ONLY what's in the `exports:` section - nothing else",
+                    "3. **CONCRETE CLASSES**: All classes must be concrete with NotImplementedError()",
+                    "4. **NO EXTRA CODE**: Don't add helper classes, utility functions, or extra types",
+                    "",
+                    "## Requirements:",
                     "- Each export becomes a function or method that can be imported and called",
-                    "- For entities: Create a dataclass with fields and CRUD methods",
-                    "- For services: Create a class with method signatures matching exports",
-                    "- All methods must raise NotImplementedError() - no real implementation",
+                    "- For entities: Create a dataclass with fields and methods from exports",
+                    "- For services: Create a class with method signatures matching exports ONLY",
+                    "- All methods must raise NotImplementedError() - NO real implementation",
                     "- Include complete type hints for all parameters and return types",
                     "- Do NOT import from other generated modules (standalone interface)",
                     "- Use standard library types only (datetime, uuid, typing, etc.)",
                     "",
-                    "## COMPLETENESS REQUIREMENTS",
+                    "## What TO Include:",
+                    "- Classes/functions explicitly named in exports",
+                    "- Parameters and return types for exported functions",
+                    "- Fields for dataclasses if entity type",
+                    "- Enums if explicitly needed by exports",
+                    "- Docstrings for exported items",
                     "",
-                    "The stub must be COMPLETE - the implementation step will only fill in bodies:",
-                    "",
-                    "- Include COMPLETE enum definitions with all values",
-                    "- Include docstrings for EVERY function and class explaining:",
-                    "  - What the function does",
-                    "  - Parameters and their types",
-                    "  - Return value and type",
-                    "  - Possible exceptions",
-                    "- Include all type aliases and TypedDicts needed",
-                    "- For dataclasses: include all fields with types and defaults",
-                    "- Types must be fully specified (no Any unless absolutely necessary)",
-                    "- All methods must raise NotImplementedError()",
+                    "## What NOT TO Include:",
+                    "- ABC, abstractmethod, Protocol - NEVER",
+                    "- Helper classes not in exports",
+                    "- Utility functions not in exports",
+                    "- TypedDicts unless explicitly needed",
+                    "- Extra type aliases",
                 ]
             )
 
@@ -428,13 +434,22 @@ class PromptBuilder:
             "3. Write tests that verify the implementation",
             f"4. Run tests with {lang_info['test_runner']} and iterate until they pass",
             "",
-            "## CRITICAL CONSTRAINTS",
+            "## CRITICAL CONSTRAINTS - PRESERVE EXPORTS",
             "",
-            "- DO NOT add new public exports (classes, functions, constants)",
-            "- DO NOT modify function signatures or type hints",
-            "- DO NOT change docstrings",
-            "- ONLY replace NotImplementedError() with working code",
-            "- Private helpers (names starting with _) ARE allowed",
+            "The header file defines the PUBLIC API. You MUST NOT change it:",
+            "",
+            "- DO NOT add new classes, functions, or constants (except private _helpers)",
+            "- DO NOT remove any existing classes, functions, or constants",
+            "- DO NOT modify function signatures, parameters, or return types",
+            "- DO NOT change type hints",
+            "- DO NOT rename anything",
+            "- ONLY replace NotImplementedError() bodies with working code",
+            "",
+            "If you add `class Foo` that wasn't in the header -> VIOLATION",
+            "If you remove `def bar()` that was in the header -> VIOLATION",
+            "If you change `def foo(x: int)` to `def foo(x: str)` -> VIOLATION",
+            "",
+            "Private helpers (names starting with _) ARE allowed.",
             "",
         ]
 
@@ -545,21 +560,28 @@ class PromptBuilder:
         if original_exports:
             prompt_parts.extend(
                 [
-                    "## EXPORT VALIDATION",
+                    "## CRITICAL: EXPORT VALIDATION",
                     "",
-                    "The original stub had these public exports:",
+                    "The ORIGINAL HEADER had these public exports:",
                     "",
                 ]
             )
             for export in sorted(original_exports):
-                prompt_parts.append(f"- {export}")
+                prompt_parts.append(f"- `{export}`")
             prompt_parts.extend(
                 [
                     "",
-                    "CHECK: The implementation MUST have EXACTLY these same exports.",
-                    "- No new public classes, functions, or constants allowed",
-                    "- Private names (starting with _) ARE allowed",
-                    "- Report REVIEW_FAILED if exports don't match",
+                    "**The implementation MUST have EXACTLY these same exports.**",
+                    "",
+                    "Check for violations:",
+                    "1. ADDED exports (classes/functions in impl but NOT in list above) -> FAIL",
+                    "2. REMOVED exports (items in list above but NOT in impl) -> FAIL",
+                    "3. CHANGED signatures (different parameters or return types) -> FAIL",
+                    "",
+                    "Private names (starting with `_`) are allowed and don't count as exports.",
+                    "",
+                    "If exports don't match EXACTLY, report REVIEW_FAILED and FIX the implementation",
+                    "to match the original exports. Do NOT add new public classes or functions.",
                     "",
                 ]
             )
@@ -763,6 +785,81 @@ class PromptBuilder:
 
         return "\n".join(prompt_parts)
 
+    def build_header_review_prompt(
+        self,
+        spec: SpecFile,
+        header_path: Path,
+    ) -> str:
+        """Build a prompt to review if header correctly represents the spec.
+
+        This is used after header generation to verify that:
+        - Only exports from the spec are included
+        - No abstract classes or unnecessary code
+        - Everything is useful and minimal
+
+        Args:
+            spec: The original spec file.
+            header_path: Path to the generated header file.
+
+        Returns:
+            Complete review prompt for the LLM.
+        """
+        # Extract expected exports from spec
+        exports_list = spec.exports.items if spec.exports.items else []
+
+        prompt_parts = [
+            "REVIEW the generated header against the spec.",
+            "",
+            "## Original Spec",
+            "",
+            "```spec",
+            spec.full_content,
+            "```",
+            "",
+            "## Expected Exports",
+            "",
+            "The header should contain ONLY these exports:",
+            "",
+        ]
+
+        for export in exports_list:
+            prompt_parts.append(f"- {export}")
+
+        prompt_parts.extend(
+            [
+                "",
+                "## Review Criteria",
+                "",
+                "Check the header file for these FAILURES:",
+                "",
+                "1. **ABSTRACT CLASSES**: ABC, abstractmethod, Protocol - FAIL",
+                "2. **EXTRA EXPORTS**: Classes/functions NOT in the exports list - FAIL",
+                "3. **MISSING EXPORTS**: Exports from spec not in header - FAIL",
+                "4. **NON-STUB METHODS**: Methods with real implementation (not NotImplementedError) - FAIL",
+                "5. **EXTRA TYPES**: TypedDicts, Protocols, helper classes not needed - FAIL",
+                "",
+                "## Your Task",
+                "",
+                f"1. Read the header at `{header_path}`",
+                "2. Compare against the exports list above",
+                "3. Check for abstract classes or unnecessary code",
+                "",
+                "## Response Format",
+                "",
+                "If the header is correct, respond with exactly:",
+                "REVIEW_PASSED",
+                "",
+                "If there are issues, respond with:",
+                "REVIEW_FAILED",
+                "- Issue 1: ...",
+                "- Issue 2: ...",
+                "",
+                "Then FIX the issues by rewriting the header file.",
+            ]
+        )
+
+        return "\n".join(prompt_parts)
+
     def build_header_instructions_prompt(self, language: str) -> str:
         """Build the instructions prompt for header generation.
 
@@ -802,6 +899,37 @@ Generate Python stub files with:
 - Complete enum definitions
 - Docstrings for every function and class
 - Standard library types only (datetime, uuid, typing, etc.)
+
+## CRITICAL RULES - READ CAREFULLY
+
+1. **NO ABSTRACT CLASSES**: Never use ABC or abstractmethod. Use concrete classes.
+2. **ONLY EXPORTS**: Only include what's explicitly listed in the spec's `exports:` section
+3. **NO EXTRA CODE**: Don't add helper classes, utility functions, or extra types
+4. **MINIMAL AND USEFUL**: Every line of code must serve a purpose from the spec
+5. **CONCRETE IMPLEMENTATIONS**: Methods should raise NotImplementedError(), not be abstract
+
+Example - If spec says:
+```
+exports:
+- create_student(name, email) -> Student
+- Student.save() -> None
+```
+
+Generate ONLY:
+```python
+@dataclass
+class Student:
+    name: str
+    email: str
+
+    def save(self) -> None:
+        raise NotImplementedError()
+
+def create_student(name: str, email: str) -> Student:
+    raise NotImplementedError()
+```
+
+Do NOT add abstract base classes, protocols, or extra types not in exports.
 """
 
         prompt_parts = [
@@ -821,9 +949,17 @@ Generate Python stub files with:
             "For each spec I give you:",
             "",
             "1. Read the spec file to understand description and exports",
-            "2. Generate ONLY the interface/header file",
+            "2. Generate ONLY what is listed in the `exports:` section",
             "3. Write the file to the specified output path",
             "4. Do NOT generate implementation or tests",
+            "",
+            "## STRICT RULES",
+            "",
+            "- ONLY include what's explicitly in `exports:` - nothing more",
+            "- NO abstract classes or ABC/abstractmethod - use concrete classes",
+            "- NO extra helper classes, utilities, or types not in exports",
+            "- Every export must be directly callable/importable",
+            "- Methods raise NotImplementedError(), they are NOT abstract",
             "",
             "Ready for header generation tasks.",
         ]
