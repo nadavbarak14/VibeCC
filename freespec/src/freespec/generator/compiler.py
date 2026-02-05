@@ -363,8 +363,43 @@ class IndependentCompiler:
                     last_log_file = result.log_file or last_log_file
                     continue
 
-            # Tests passed (or no tests defined) - now REVIEW with export validation
-            logger.info("  Tests passed, running review...")
+            # Tests passed (or no tests defined) - validate exports programmatically
+            if original_exports and impl_path.exists():
+                current_content = impl_path.read_text()
+                current_exports = extract_public_exports(current_content)
+
+                added_exports = current_exports - original_exports
+                removed_exports = original_exports - current_exports
+
+                if added_exports or removed_exports:
+                    logger.warning(
+                        "  Export validation failed: added=%s, removed=%s",
+                        sorted(added_exports),
+                        sorted(removed_exports),
+                    )
+                    last_failure_reason = f"Exports changed: added={sorted(added_exports)}, removed={sorted(removed_exports)}"
+                    self.client.set_current_phase("fix")
+
+                    fix_prompt = (
+                        "EXPORT VALIDATION FAILED - Fix the implementation.\n\n"
+                        f"Original header exports: {sorted(original_exports)}\n"
+                        f"Current implementation exports: {sorted(current_exports)}\n\n"
+                    )
+                    if added_exports:
+                        fix_prompt += f"PROBLEM: You ADDED these exports that weren't in the header: {sorted(added_exports)}\n"
+                        fix_prompt += "Remove these new classes/functions or make them private (prefix with _).\n\n"
+                    if removed_exports:
+                        fix_prompt += f"PROBLEM: You REMOVED these exports that were in the header: {sorted(removed_exports)}\n"
+                        fix_prompt += "Add these back - do not remove anything from the original header.\n\n"
+                    fix_prompt += "The implementation must have EXACTLY the same public exports as the header."
+
+                    result = self.client.generate(fix_prompt, session_id)
+                    total_duration += result.duration_seconds
+                    last_log_file = result.log_file or last_log_file
+                    continue
+
+            # Exports validated - now REVIEW for spec fulfillment
+            logger.info("  Exports validated, running spec review...")
             review_attempts += 1
             self.client.set_current_phase("review")
             review_prompt = self.prompt_builder.build_review_prompt(
@@ -711,8 +746,43 @@ class IndependentCompiler:
                     last_log_file = result.log_file or last_log_file
                     continue
 
-            # Tests passed (or no tests defined) - now REVIEW with export validation
-            logger.info("  Tests passed, running review...")
+            # Tests passed (or no tests defined) - validate exports programmatically
+            if original_exports and impl_path.exists():
+                current_content = impl_path.read_text()
+                current_exports = extract_public_exports(current_content)
+
+                added_exports = current_exports - original_exports
+                removed_exports = original_exports - current_exports
+
+                if added_exports or removed_exports:
+                    logger.warning(
+                        "  Export validation failed: added=%s, removed=%s",
+                        sorted(added_exports),
+                        sorted(removed_exports),
+                    )
+                    last_failure_reason = f"Exports changed: added={sorted(added_exports)}, removed={sorted(removed_exports)}"
+                    self.client.set_current_phase("fix")
+
+                    fix_prompt = (
+                        "EXPORT VALIDATION FAILED - Fix the implementation.\n\n"
+                        f"Original header exports: {sorted(original_exports)}\n"
+                        f"Current implementation exports: {sorted(current_exports)}\n\n"
+                    )
+                    if added_exports:
+                        fix_prompt += f"PROBLEM: You ADDED these exports that weren't in the header: {sorted(added_exports)}\n"
+                        fix_prompt += "Remove these new classes/functions or make them private (prefix with _).\n\n"
+                    if removed_exports:
+                        fix_prompt += f"PROBLEM: You REMOVED these exports that were in the header: {sorted(removed_exports)}\n"
+                        fix_prompt += "Add these back - do not remove anything from the original header.\n\n"
+                    fix_prompt += "The implementation must have EXACTLY the same public exports as the header."
+
+                    result = self.client.generate(fix_prompt, forked_session_id)
+                    total_duration += result.duration_seconds
+                    last_log_file = result.log_file or last_log_file
+                    continue
+
+            # Exports validated - now REVIEW for spec fulfillment
+            logger.info("  Exports validated, running spec review...")
             review_attempts += 1
             self.client.set_current_phase("review")
             review_prompt = self.prompt_builder.build_review_prompt(

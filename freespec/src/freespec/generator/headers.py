@@ -26,6 +26,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("freespec.generator.headers")
 
+MAX_HEADER_REVIEW_RETRIES = 3
+
 
 class HeaderGenerationError(Exception):
     """Raised when header generation fails."""
@@ -276,6 +278,8 @@ class HeaderGenerator:
         """Generate a header file by forking from the instructions session.
 
         Each header starts fresh from the instructions state.
+        Includes a review step to ensure the header only contains
+        what's in the spec's exports section.
 
         Args:
             spec: The spec to generate a header for.
@@ -305,24 +309,68 @@ class HeaderGenerator:
 
         logger.info("Generating header for %s -> %s", spec.spec_id, output_path)
         result = self.client.fork_session(base_session_id, prompt)
+        forked_session_id = result.session_id
 
         if not result.success:
             raise HeaderGenerationError(
                 f"Failed to generate header for {spec.spec_id}: {result.error}"
             )
 
-        # Read the generated file content
+        # Review loop - verify header contains only what's in exports
+        last_failure_reason = "Unknown failure"
+
+        for attempt in range(MAX_HEADER_REVIEW_RETRIES):
+            # Verify file exists
+            if not output_path.exists():
+                logger.warning("  Header file not written, asking to write it...")
+                last_failure_reason = "Header file not written"
+                self.client.set_current_phase("fix")
+                result = self.client.generate(
+                    "The header file was not written. "
+                    "Please write it to the specified path.",
+                    forked_session_id,
+                )
+                continue
+
+            # Run review
+            logger.info("  Reviewing header (attempt %d/%d)...", attempt + 1, MAX_HEADER_REVIEW_RETRIES)
+            self.client.set_current_phase("review")
+            review_prompt = self.prompt_builder.build_header_review_prompt(spec, output_path)
+            review_result = self.client.generate(review_prompt, forked_session_id)
+
+            if "REVIEW_PASSED" in review_result.output:
+                logger.info("  Header review passed!")
+                content = output_path.read_text()
+
+                # Update manifest if detector provided
+                if detector:
+                    detector.update_manifest_after_header(spec, output_path)
+
+                return GeneratedHeader(
+                    spec_id=spec.spec_id,
+                    path=output_path,
+                    content=content,
+                )
+
+            # Review failed - Claude was already told to fix issues in the review prompt
+            last_failure_reason = f"Review failed: {review_result.output[:500]}"
+            logger.info("  Header review failed (attempt %d/%d)", attempt + 1, MAX_HEADER_REVIEW_RETRIES)
+
+        # All retries exhausted - return whatever we have but log warning
+        logger.warning(
+            "  Header review failed after %d attempts for %s: %s",
+            MAX_HEADER_REVIEW_RETRIES,
+            spec.spec_id,
+            last_failure_reason[:200],
+        )
+
+        # Still return the header even if review failed - let compilation catch issues
         if output_path.exists():
             content = output_path.read_text()
         else:
-            # LLM might have written content differently, extract from output
-            content = self._extract_code_from_output(result.output)
-            if content:
-                output_path.write_text(content)
-            else:
-                raise HeaderGenerationError(
-                    f"Generated header not found at {output_path} and couldn't extract from output"
-                )
+            raise HeaderGenerationError(
+                f"Header not found at {output_path} after {MAX_HEADER_REVIEW_RETRIES} attempts"
+            )
 
         # Update manifest if detector provided
         if detector:

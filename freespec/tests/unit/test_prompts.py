@@ -63,7 +63,7 @@ class TestPromptBuilder:
         assert "dependencies" not in prompt.lower() or "do not" in prompt.lower()
 
     def test_build_header_prompt_completeness(self, builder: PromptBuilder) -> None:
-        """Should require complete stubs with docstrings and types."""
+        """Should have strict rules for minimal, export-only headers."""
         spec = make_spec("student", "entities")
         output_path = Path("/output/entities/student.py")
 
@@ -73,14 +73,16 @@ class TestPromptBuilder:
             output_path=output_path,
         )
 
-        # Should mention completeness requirements
-        assert "COMPLETENESS" in prompt or "COMPLETE" in prompt
+        # Should have critical rules about what NOT to include
+        assert "CRITICAL RULES" in prompt or "NO ABSTRACT" in prompt
         # Should require docstrings
         assert "docstring" in prompt.lower()
-        # Should require enums
+        # Should mention enums
         assert "enum" in prompt.lower()
         # Should require full type hints
         assert "type" in prompt.lower()
+        # Should explicitly forbid abstract classes
+        assert "abstract" in prompt.lower()
 
     def test_build_impl_prompt_without_headers(self, builder: PromptBuilder) -> None:
         """Should build an implementation prompt without headers."""
