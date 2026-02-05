@@ -39,11 +39,15 @@ class SettingsConfig:
 
 @dataclass
 class FreeSpecConfig:
-    """FreeSpec project configuration."""
+    """FreeSpec project configuration.
+
+    Note: The 'language' field is no longer stored in config. Instead,
+    language is specified via CLI --lang flag, allowing the same project
+    to be compiled to different targets without modifying the config file.
+    """
 
     name: str
     version: str
-    language: str
     specs: list[str]
     output: OutputConfig = field(default_factory=OutputConfig)
     settings: SettingsConfig = field(default_factory=SettingsConfig)
@@ -63,7 +67,7 @@ class FreeSpecConfig:
         Raises:
             ConfigError: If required fields are missing.
         """
-        required_fields = ["name", "version", "language", "specs"]
+        required_fields = ["name", "version", "specs"]
         missing = [f for f in required_fields if f not in data]
         if missing:
             raise ConfigError(f"Missing required fields: {', '.join(missing)}")
@@ -84,36 +88,69 @@ class FreeSpecConfig:
         return cls(
             name=data["name"],
             version=data["version"],
-            language=data["language"],
             specs=data["specs"],
             output=output,
             settings=settings,
             root_path=root_path,
         )
 
-    def get_output_path(self) -> Path:
+    def get_output_path(self, language: str | None = None) -> Path:
         """Get absolute output path.
+
+        Args:
+            language: Target language (optional, for backwards compatibility).
 
         Returns:
             Absolute path to the output directory.
         """
-        return self.root_path / self.output.out
+        base = self.root_path / self.output.out
+        if language:
+            return base / language
+        return base
 
-    def get_src_path(self) -> Path:
+    def get_src_path(self, language: str) -> Path:
         """Get absolute path to src directory for headers/implementations.
 
-        Returns:
-            Absolute path to out/src/ directory.
-        """
-        return self.root_path / self.output.out / self.output.src
+        Args:
+            language: Target language (python, cpp).
 
-    def get_tests_path(self) -> Path:
+        Returns:
+            Absolute path to out/{language}/src/ directory.
+        """
+        return self.root_path / self.output.out / language / self.output.src
+
+    def get_tests_path(self, language: str) -> Path:
         """Get absolute path to tests directory.
 
+        Args:
+            language: Target language (python, cpp).
+
         Returns:
-            Absolute path to out/tests/ directory.
+            Absolute path to out/{language}/tests/ directory.
         """
-        return self.root_path / self.output.out / self.output.tests
+        return self.root_path / self.output.out / language / self.output.tests
+
+    def get_log_path(self, language: str) -> Path:
+        """Get absolute path to compile log directory.
+
+        Args:
+            language: Target language (python, cpp).
+
+        Returns:
+            Absolute path to logs/{language}/compile/ directory.
+        """
+        return self.root_path / "logs" / language / "compile"
+
+    def get_manifest_path(self, language: str) -> Path:
+        """Get absolute path to build manifest file.
+
+        Args:
+            language: Target language (python, cpp).
+
+        Returns:
+            Absolute path to out/{language}/.freespec_build.json.
+        """
+        return self.root_path / self.output.out / language / ".freespec_build.json"
 
 
 def load_config(config_path: Path | str) -> FreeSpecConfig:

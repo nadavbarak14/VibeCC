@@ -513,7 +513,7 @@ class PromptBuilder:
         self,
         spec: SpecFile,
         impl_path: Path,
-        test_path: Path,
+        test_path: Path | None,
         original_exports: set[str] | None = None,
     ) -> str:
         """Build a prompt to review if implementation fulfills the spec.
@@ -524,7 +524,7 @@ class PromptBuilder:
         Args:
             spec: The original spec file.
             impl_path: Path to the generated implementation file.
-            test_path: Path to the generated test file.
+            test_path: Path to the generated test file, or None if no tests.
             original_exports: Set of public exports from the original stub.
 
         Returns:
@@ -564,20 +564,35 @@ class PromptBuilder:
                 ]
             )
 
-        prompt_parts.extend(
-            [
-                "## Your Task",
-                "",
-                f"1. Read the implementation at `{impl_path}`",
-                f"2. Read the tests at `{test_path}`",
-                "3. Check if ALL exports from the spec are properly implemented",
-                "4. Check if ALL test cases from the spec are covered",
-                "5. Check if the implementation matches the description",
-            ]
-        )
+        if test_path:
+            prompt_parts.extend(
+                [
+                    "## Your Task",
+                    "",
+                    f"1. Read the implementation at `{impl_path}`",
+                    f"2. Read the tests at `{test_path}`",
+                    "3. Check if ALL exports from the spec are properly implemented",
+                    "4. Check if ALL test cases from the spec are covered",
+                    "5. Check if the implementation matches the description",
+                ]
+            )
+            next_step = 6
+        else:
+            prompt_parts.extend(
+                [
+                    "## Your Task",
+                    "",
+                    f"1. Read the implementation at `{impl_path}`",
+                    "2. Check if ALL exports from the spec are properly implemented",
+                    "3. Check if the implementation matches the description",
+                ]
+            )
+            next_step = 4
 
         if original_exports:
-            prompt_parts.append("6. Verify that public exports match the original stub exactly")
+            prompt_parts.append(
+                f"{next_step}. Verify that public exports match the original stub exactly"
+            )
 
         prompt_parts.extend(
             [

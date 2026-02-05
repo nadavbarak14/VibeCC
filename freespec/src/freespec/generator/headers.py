@@ -10,11 +10,15 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from freespec.config import FreeSpecConfig
 from freespec.generator.prompts import PromptBuilder
 from freespec.llm.claude_code import ClaudeCodeClient
 from freespec.parser.models import SpecFile
+
+if TYPE_CHECKING:
+    from freespec.rebuild.detector import RebuildDetector
 
 logger = logging.getLogger("freespec.generator.headers")
 
@@ -66,12 +70,16 @@ class HeaderGenerator:
         self,
         spec: SpecFile,
         config: FreeSpecConfig,
+        language: str,
+        detector: RebuildDetector | None = None,
     ) -> GeneratedHeader:
         """Generate a header file for a single spec.
 
         Args:
             spec: The spec to generate a header for.
             config: Project configuration.
+            language: Target language (python, cpp).
+            detector: Optional rebuild detector to update manifest.
 
         Returns:
             The generated header file info.
@@ -79,15 +87,16 @@ class HeaderGenerator:
         Raises:
             HeaderGenerationError: If generation fails.
         """
-        output_path = self._get_header_path(spec, config)
+        output_path = self._get_header_path(spec, config, language)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Set current spec for logging
+        # Set current spec and phase for logging
         self.client.set_current_spec(f"header_{spec.spec_id}")
+        self.client.set_current_phase("header")
 
         prompt = self.prompt_builder.build_header_prompt(
             spec=spec,
-            language=config.language,
+            language=language,
             output_path=output_path,
         )
 
@@ -112,6 +121,10 @@ class HeaderGenerator:
                     f"Generated header not found at {output_path} and couldn't extract from output"
                 )
 
+        # Update manifest if detector provided
+        if detector:
+            detector.update_manifest_after_header(spec, output_path)
+
         return GeneratedHeader(
             spec_id=spec.spec_id,
             path=output_path,
@@ -122,6 +135,8 @@ class HeaderGenerator:
         self,
         specs: list[SpecFile],
         config: FreeSpecConfig,
+        language: str,
+        detector: RebuildDetector | None = None,
     ) -> HeaderContext:
         """Generate headers for all specs, forking from a shared instructions session.
 
@@ -131,6 +146,8 @@ class HeaderGenerator:
         Args:
             specs: Specs to generate headers for (any order is fine).
             config: Project configuration.
+            language: Target language (python, cpp).
+            detector: Optional rebuild detector to update manifest.
 
         Returns:
             Context with all generated headers.
@@ -146,9 +163,10 @@ class HeaderGenerator:
         # Send instructions once at the start
         logger.info("Creating header generation session with instructions...")
         self.client.set_current_spec("_header_instructions")
+        self.client.set_current_phase("instructions")
 
         instructions = self.prompt_builder.build_header_instructions_prompt(
-            language=config.language,
+            language=language,
         )
         result = self.client.generate(instructions)
 
@@ -157,7 +175,7 @@ class HeaderGenerator:
             # Fall back to independent generation
             logger.warning("Falling back to independent header generation")
             for spec in specs:
-                header = self.generate_header(spec, config)
+                header = self.generate_header(spec, config, language, detector)
                 context.headers[spec.spec_id] = header.content
                 context.generated_files.append(header)
             return context
@@ -167,7 +185,7 @@ class HeaderGenerator:
 
         # Fork for each header (each starts fresh from instructions)
         for spec in specs:
-            header = self._generate_header_forked(spec, config, base_session_id)
+            header = self._generate_header_forked(spec, config, language, base_session_id, detector)
             context.headers[spec.spec_id] = header.content
             context.generated_files.append(header)
 
@@ -177,7 +195,9 @@ class HeaderGenerator:
         self,
         spec: SpecFile,
         config: FreeSpecConfig,
+        language: str,
         base_session_id: str,
+        detector: RebuildDetector | None = None,
     ) -> GeneratedHeader:
         """Generate a header file by forking from the instructions session.
 
@@ -186,7 +206,9 @@ class HeaderGenerator:
         Args:
             spec: The spec to generate a header for.
             config: Project configuration.
+            language: Target language (python, cpp).
             base_session_id: Session ID to fork from.
+            detector: Optional rebuild detector to update manifest.
 
         Returns:
             The generated header file info.
@@ -194,14 +216,18 @@ class HeaderGenerator:
         Raises:
             HeaderGenerationError: If generation fails.
         """
-        output_path = self._get_header_path(spec, config)
+        output_path = self._get_header_path(spec, config, language)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Set current spec for logging
+        # Set current spec and phase for logging
         self.client.set_current_spec(f"header_{spec.spec_id}")
+        self.client.set_current_phase("header")
 
         # Build minimal prompt - just references the spec file
-        prompt = f"Generate header for: {spec.spec_id}\n\nSpec file: {spec.path}\nOutput: {output_path}"
+        prompt = (
+            f"Generate header for: {spec.spec_id}\n\n"
+            f"Spec file: {spec.path}\nOutput: {output_path}"
+        )
 
         logger.info("Generating header for %s -> %s", spec.spec_id, output_path)
         result = self.client.fork_session(base_session_id, prompt)
@@ -224,34 +250,38 @@ class HeaderGenerator:
                     f"Generated header not found at {output_path} and couldn't extract from output"
                 )
 
+        # Update manifest if detector provided
+        if detector:
+            detector.update_manifest_after_header(spec, output_path)
+
         return GeneratedHeader(
             spec_id=spec.spec_id,
             path=output_path,
             content=content,
         )
 
-    def _get_header_ext(self, config: FreeSpecConfig) -> str:
+    def _get_header_ext(self, language: str) -> str:
         """Get header file extension for the target language."""
-        lang = config.language.lower()
-        if lang in ("cpp", "c++"):
+        if language.lower() in ("cpp", "c++"):
             return ".hpp"
         return ".py"
 
-    def _get_header_path(self, spec: SpecFile, config: FreeSpecConfig) -> Path:
+    def _get_header_path(self, spec: SpecFile, config: FreeSpecConfig, language: str) -> Path:
         """Determine output path for a spec's header file.
 
-        Headers go to out/src/ directory mirroring spec structure:
-        specs/entities/student.spec → out/src/entities/student.py
+        Headers go to out/{language}/src/ directory mirroring spec structure:
+        specs/entities/student.spec → out/python/src/entities/student.py
 
         Args:
             spec: The spec file.
             config: Project configuration.
+            language: Target language (python, cpp).
 
         Returns:
             Path where header file should be written.
         """
-        base = config.get_src_path()
-        ext = self._get_header_ext(config)
+        base = config.get_src_path(language)
+        ext = self._get_header_ext(language)
         return base / spec.category / f"{spec.name}{ext}"
 
     def _extract_code_from_output(self, output: str) -> str | None:
@@ -278,38 +308,42 @@ class HeaderGenerator:
         return None
 
 
-def load_headers(config: FreeSpecConfig) -> dict[str, str]:
+def load_headers(config: FreeSpecConfig, language: str) -> dict[str, str]:
     """Load all existing header files from the src directory.
 
     Args:
         config: Project configuration.
+        language: Target language (python, cpp).
 
     Returns:
         Map of spec_id to header content.
     """
-    src_dir = config.get_src_path()
+    src_dir = config.get_src_path(language)
     headers: dict[str, str] = {}
 
     if not src_dir.exists():
         return headers
 
-    for py_file in src_dir.rglob("*.py"):
-        if py_file.name == "__init__.py":
+    # Determine extension based on language
+    ext = ".py" if language.lower() == "python" else ".hpp"
+
+    for header_file in src_dir.rglob(f"*{ext}"):
+        if header_file.name == "__init__.py":
             continue
         # Skip test files
-        if py_file.name.startswith("test_"):
+        if header_file.name.startswith("test_"):
             continue
 
         # Reconstruct spec_id from path
-        relative = py_file.relative_to(src_dir)
+        relative = header_file.relative_to(src_dir)
         category = relative.parent.name if relative.parent.name else ""
-        name = py_file.stem
+        name = header_file.stem
 
         if category:
             spec_id = f"{category}/{name}"
         else:
             spec_id = name
 
-        headers[spec_id] = py_file.read_text()
+        headers[spec_id] = header_file.read_text()
 
     return headers

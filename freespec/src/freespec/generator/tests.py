@@ -65,6 +65,7 @@ class SkeletonTestGenerator:
         spec: SpecFile,
         config: FreeSpecConfig,
         source_code: str,
+        language: str,
     ) -> GeneratedTest | None:
         """Generate a test file for a single spec.
 
@@ -72,6 +73,7 @@ class SkeletonTestGenerator:
             spec: The spec to generate tests for.
             config: Project configuration.
             source_code: The header or implementation code to test against.
+            language: Target language (python, cpp).
 
         Returns:
             The generated test file info, or None if no tests in spec.
@@ -83,12 +85,12 @@ class SkeletonTestGenerator:
             logger.debug("No tests defined for %s, skipping test generation", spec.spec_id)
             return None
 
-        output_path = self._get_test_path(spec, config)
+        output_path = self._get_test_path(spec, config, language)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         prompt = self.prompt_builder.build_test_prompt(
             spec=spec,
-            language=config.language,
+            language=language,
             output_path=output_path,
             impl_code=source_code,
         )
@@ -119,6 +121,7 @@ class SkeletonTestGenerator:
         specs: list[SpecFile],
         config: FreeSpecConfig,
         source_code: dict[str, str],
+        language: str,
     ) -> SkeletonTestContext:
         """Generate tests for all specs.
 
@@ -126,6 +129,7 @@ class SkeletonTestGenerator:
             specs: Specs to generate tests for.
             config: Project configuration.
             source_code: Map of spec_id to header or implementation code.
+            language: Target language (python, cpp).
 
         Returns:
             Context with all generated tests.
@@ -137,27 +141,29 @@ class SkeletonTestGenerator:
 
         for spec in specs:
             code = source_code.get(spec.spec_id, "")
-            test = self.generate_test(spec, config, code)
+            test = self.generate_test(spec, config, code, language)
             if test:
                 context.generated_files.append(test)
 
         return context
 
-    def _get_test_path(self, spec: SpecFile, config: FreeSpecConfig) -> Path:
+    def _get_test_path(self, spec: SpecFile, config: FreeSpecConfig, language: str) -> Path:
         """Determine output path for a spec's test file.
 
-        Tests go to out/tests/ directory:
-        specs/entities/student.spec → out/tests/entities/test_student.py
+        Tests go to out/{language}/tests/ directory:
+        specs/entities/student.spec → out/python/tests/entities/test_student.py
 
         Args:
             spec: The spec file.
             config: Project configuration.
+            language: Target language (python, cpp).
 
         Returns:
             Path where test file should be written.
         """
-        base = config.get_tests_path()
-        return base / spec.category / f"test_{spec.name}.py"
+        ext = ".py" if language.lower() == "python" else ".cpp"
+        base = config.get_tests_path(language)
+        return base / spec.category / f"test_{spec.name}{ext}"
 
     def _extract_code_from_output(self, output: str) -> str | None:
         """Try to extract code from LLM output if file wasn't written.
