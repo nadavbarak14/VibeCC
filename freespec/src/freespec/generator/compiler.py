@@ -419,14 +419,16 @@ class IndependentCompiler:
                         # Add specific guidance for common errors
                         if "AttributeError" in test_result.output:
                             fix_prompt += (
-                                "\n**AttributeError detected!** You used a field or method that doesn't exist.\n"
-                                "READ the dependency file to see what fields/methods are actually available.\n"
+                                "\n**AttributeError detected!** "
+                                "You used a field/method that doesn't exist.\n"
+                                "READ the dependency file to see what's available.\n"
                                 "Do NOT guess - check the actual source code.\n\n"
                             )
                         if "TypeError" in test_result.output and "argument" in test_result.output:
                             fix_prompt += (
-                                "\n**TypeError detected!** You called a function with wrong arguments.\n"
-                                "READ the dependency file to see the correct function signature.\n"
+                                "\n**TypeError detected!** "
+                                "You called a function with wrong arguments.\n"
+                                "READ the dependency file for the correct signature.\n"
                                 "Do NOT guess - check the actual source code.\n\n"
                             )
                         fix_prompt += "Fix the code and run that exact command to verify."
@@ -445,10 +447,11 @@ class IndependentCompiler:
                     fix_prompt = (
                         f"Module import validation FAILED.\n\n"
                         f"Error: {import_error}\n\n"
-                        "This usually means you're using a field, method, or class that doesn't exist.\n"
-                        "READ the dependency files to see what's actually available.\n"
+                        "This usually means you're using a field/method/class "
+                        "that doesn't exist.\n"
+                        "READ the dependency files to see what's available.\n"
                         "Do NOT guess - check the actual source code.\n\n"
-                        "Fix the implementation and ensure the module can be imported cleanly."
+                        "Fix the implementation so the module can be imported."
                     )
                     result = self.client.generate(fix_prompt, session_id)
                     total_duration += result.duration_seconds
@@ -469,7 +472,10 @@ class IndependentCompiler:
                         sorted(added_exports),
                         sorted(removed_exports),
                     )
-                    last_failure_reason = f"Exports changed: added={sorted(added_exports)}, removed={sorted(removed_exports)}"
+                    last_failure_reason = (
+                        f"Exports changed: added={sorted(added_exports)}, "
+                        f"removed={sorted(removed_exports)}"
+                    )
                     self.client.set_current_phase("fix")
 
                     fix_prompt = (
@@ -478,12 +484,24 @@ class IndependentCompiler:
                         f"Current implementation exports: {sorted(current_exports)}\n\n"
                     )
                     if added_exports:
-                        fix_prompt += f"PROBLEM: You ADDED these exports that weren't in the header: {sorted(added_exports)}\n"
-                        fix_prompt += "Remove these new classes/functions or make them private (prefix with _).\n\n"
+                        fix_prompt += (
+                            f"PROBLEM: You ADDED exports not in header: "
+                            f"{sorted(added_exports)}\n"
+                        )
+                        fix_prompt += (
+                            "Remove these or make them private (prefix with _).\n\n"
+                        )
                     if removed_exports:
-                        fix_prompt += f"PROBLEM: You REMOVED these exports that were in the header: {sorted(removed_exports)}\n"
-                        fix_prompt += "Add these back - do not remove anything from the original header.\n\n"
-                    fix_prompt += "The implementation must have EXACTLY the same public exports as the header."
+                        fix_prompt += (
+                            f"PROBLEM: You REMOVED exports from header: "
+                            f"{sorted(removed_exports)}\n"
+                        )
+                        fix_prompt += (
+                            "Add these back - don't remove from the header.\n\n"
+                        )
+                    fix_prompt += (
+                        "Implementation must have EXACTLY same exports as header."
+                    )
 
                     result = self.client.generate(fix_prompt, session_id)
                     total_duration += result.duration_seconds
@@ -835,14 +853,16 @@ class IndependentCompiler:
                         # Add specific guidance for common errors
                         if "AttributeError" in test_result.output:
                             fix_prompt += (
-                                "\n**AttributeError detected!** You used a field or method that doesn't exist.\n"
-                                "READ the dependency file to see what fields/methods are actually available.\n"
+                                "\n**AttributeError detected!** "
+                                "You used a field/method that doesn't exist.\n"
+                                "READ the dependency file to see what's available.\n"
                                 "Do NOT guess - check the actual source code.\n\n"
                             )
                         if "TypeError" in test_result.output and "argument" in test_result.output:
                             fix_prompt += (
-                                "\n**TypeError detected!** You called a function with wrong arguments.\n"
-                                "READ the dependency file to see the correct function signature.\n"
+                                "\n**TypeError detected!** "
+                                "You called a function with wrong arguments.\n"
+                                "READ the dependency file for the correct signature.\n"
                                 "Do NOT guess - check the actual source code.\n\n"
                             )
                         fix_prompt += "Fix the code and run that exact command to verify."
@@ -861,10 +881,11 @@ class IndependentCompiler:
                     fix_prompt = (
                         f"Module import validation FAILED.\n\n"
                         f"Error: {import_error}\n\n"
-                        "This usually means you're using a field, method, or class that doesn't exist.\n"
-                        "READ the dependency files to see what's actually available.\n"
+                        "This usually means you're using a field/method/class "
+                        "that doesn't exist.\n"
+                        "READ the dependency files to see what's available.\n"
                         "Do NOT guess - check the actual source code.\n\n"
-                        "Fix the implementation and ensure the module can be imported cleanly."
+                        "Fix the implementation so the module can be imported."
                     )
                     result = self.client.generate(fix_prompt, forked_session_id)
                     total_duration += result.duration_seconds
@@ -885,7 +906,10 @@ class IndependentCompiler:
                         sorted(added_exports),
                         sorted(removed_exports),
                     )
-                    last_failure_reason = f"Exports changed: added={sorted(added_exports)}, removed={sorted(removed_exports)}"
+                    last_failure_reason = (
+                        f"Exports changed: added={sorted(added_exports)}, "
+                        f"removed={sorted(removed_exports)}"
+                    )
                     self.client.set_current_phase("fix")
 
                     fix_prompt = (
@@ -894,12 +918,24 @@ class IndependentCompiler:
                         f"Current implementation exports: {sorted(current_exports)}\n\n"
                     )
                     if added_exports:
-                        fix_prompt += f"PROBLEM: You ADDED these exports that weren't in the header: {sorted(added_exports)}\n"
-                        fix_prompt += "Remove these new classes/functions or make them private (prefix with _).\n\n"
+                        fix_prompt += (
+                            f"PROBLEM: You ADDED exports not in header: "
+                            f"{sorted(added_exports)}\n"
+                        )
+                        fix_prompt += (
+                            "Remove these or make them private (prefix with _).\n\n"
+                        )
                     if removed_exports:
-                        fix_prompt += f"PROBLEM: You REMOVED these exports that were in the header: {sorted(removed_exports)}\n"
-                        fix_prompt += "Add these back - do not remove anything from the original header.\n\n"
-                    fix_prompt += "The implementation must have EXACTLY the same public exports as the header."
+                        fix_prompt += (
+                            f"PROBLEM: You REMOVED exports from header: "
+                            f"{sorted(removed_exports)}\n"
+                        )
+                        fix_prompt += (
+                            "Add these back - don't remove from the header.\n\n"
+                        )
+                    fix_prompt += (
+                        "Implementation must have EXACTLY same exports as header."
+                    )
 
                     result = self.client.generate(fix_prompt, forked_session_id)
                     total_duration += result.duration_seconds

@@ -81,7 +81,9 @@ def main() -> None:
     default=None,
     help="Number of parallel Claude instances (default: from config or 4)",
 )
-def headers(config_path: Path | None, language: str, verbose: bool, num_workers: int | None) -> None:
+def headers(
+    config_path: Path | None, language: str, verbose: bool, num_workers: int | None
+) -> None:
     """Generate header/interface files (Pass 1).
 
     Headers are generated independently without dependency ordering.
@@ -185,7 +187,13 @@ def headers(config_path: Path | None, language: str, verbose: bool, num_workers:
     default=None,
     help="Number of parallel Claude instances (default: from config or 4)",
 )
-def impl(config_path: Path | None, language: str, no_verify: bool, verbose: bool, num_workers: int | None) -> None:
+def impl(
+    config_path: Path | None,
+    language: str,
+    no_verify: bool,
+    verbose: bool,
+    num_workers: int | None,
+) -> None:
     """Generate implementation files (Pass 2).
 
     Requires headers to be generated first. Uses all headers as context
@@ -234,7 +242,9 @@ def impl(config_path: Path | None, language: str, no_verify: bool, verbose: bool
         click.echo("\nGenerating implementations (Pass 2)...")
         workers = num_workers if num_workers is not None else config.settings.parallelism
         generator = ImplementationGenerator(client=client)
-        context = generator.generate_all_impls(specs, config, all_headers, language, num_workers=workers)
+        context = generator.generate_all_impls(
+            specs, config, all_headers, language, num_workers=workers
+        )
 
         click.echo(f"  Generated {len(context.generated_files)} implementation files")
 
