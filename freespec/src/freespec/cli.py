@@ -575,6 +575,7 @@ def compile(
 
         # Create session logger for comprehensive logging
         import time
+
         session_start_time = time.time()
 
         session_logger = SessionLogger(

@@ -486,9 +486,7 @@ class PromptBuilder:
                     f"- **{spec_id}**: READ `{path}` → `from {dep_module} import ...`"
                 )
             prompt_parts.append("")
-            prompt_parts.append(
-                "If you use a field that doesn't exist in dependency → FAILS"
-            )
+            prompt_parts.append("If you use a field that doesn't exist in dependency → FAILS")
             prompt_parts.append("")
 
         prompt_parts.extend(
@@ -1004,4 +1002,3 @@ Do NOT add abstract base classes, protocols, or extra types not in exports.
         ]
 
         return "\n".join(prompt_parts)
-

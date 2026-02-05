@@ -236,15 +236,10 @@ class HeaderGenerator:
         first_error: HeaderGenerationError | None = None
 
         def process_spec(spec: SpecFile) -> GeneratedHeader:
-            return self._generate_header_forked(
-                spec, config, language, base_session_id, detector
-            )
+            return self._generate_header_forked(spec, config, language, base_session_id, detector)
 
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
-            future_to_spec = {
-                executor.submit(process_spec, spec): spec
-                for spec in specs
-            }
+            future_to_spec = {executor.submit(process_spec, spec): spec for spec in specs}
 
             with tqdm(total=len(specs), desc="Headers", unit="spec") as pbar:
                 for future in as_completed(future_to_spec):
@@ -303,8 +298,7 @@ class HeaderGenerator:
 
         # Build minimal prompt - just references the spec file
         prompt = (
-            f"Generate header for: {spec.spec_id}\n\n"
-            f"Spec file: {spec.path}\nOutput: {output_path}"
+            f"Generate header for: {spec.spec_id}\n\nSpec file: {spec.path}\nOutput: {output_path}"
         )
 
         logger.info("Generating header for %s -> %s", spec.spec_id, output_path)
@@ -326,21 +320,17 @@ class HeaderGenerator:
                 last_failure_reason = "Header file not written"
                 self.client.set_current_phase("fix")
                 result = self.client.generate(
-                    "The header file was not written. "
-                    "Please write it to the specified path.",
+                    "The header file was not written. Please write it to the specified path.",
                     forked_session_id,
                 )
                 continue
 
             # Run review
             logger.info(
-                "  Reviewing header (attempt %d/%d)...",
-                attempt + 1, MAX_HEADER_REVIEW_RETRIES
+                "  Reviewing header (attempt %d/%d)...", attempt + 1, MAX_HEADER_REVIEW_RETRIES
             )
             self.client.set_current_phase("review")
-            review_prompt = self.prompt_builder.build_header_review_prompt(
-                spec, output_path
-            )
+            review_prompt = self.prompt_builder.build_header_review_prompt(spec, output_path)
             review_result = self.client.generate(review_prompt, forked_session_id)
 
             if "REVIEW_PASSED" in review_result.output:
@@ -360,8 +350,7 @@ class HeaderGenerator:
             # Review failed - Claude was already told to fix issues in the review prompt
             last_failure_reason = f"Review failed: {review_result.output[:500]}"
             logger.info(
-                "  Header review failed (attempt %d/%d)",
-                attempt + 1, MAX_HEADER_REVIEW_RETRIES
+                "  Header review failed (attempt %d/%d)", attempt + 1, MAX_HEADER_REVIEW_RETRIES
             )
 
         # All retries exhausted - return whatever we have but log warning

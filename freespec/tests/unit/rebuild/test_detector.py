@@ -127,9 +127,7 @@ class TestRebuildDetector:
 
         assert path == temp_config.root_path / "out" / "python" / ".freespec_build.json"
 
-    def test_load_manifest_creates_new_if_missing(
-        self, temp_config: FreeSpecConfig
-    ) -> None:
+    def test_load_manifest_creates_new_if_missing(self, temp_config: FreeSpecConfig) -> None:
         detector = RebuildDetector(temp_config, "python")
 
         manifest = detector.load_manifest()
@@ -161,9 +159,7 @@ class TestHeaderChangeDetection:
         assert info.needs_header is True
         assert RebuildReason.NO_MANIFEST in info.reasons
 
-    def test_detects_spec_change(
-        self, temp_config: FreeSpecConfig, sample_spec: SpecFile
-    ) -> None:
+    def test_detects_spec_change(self, temp_config: FreeSpecConfig, sample_spec: SpecFile) -> None:
         detector = RebuildDetector(temp_config, "python")
         # Set up manifest with old hash
         manifest = detector.load_manifest()

@@ -260,9 +260,7 @@ class RebuildDetector:
 
         # Propagate dependency changes transitively
         changed_headers = set(header_changes.keys())
-        self._propagate_dependency_changes(
-            specs_by_id, graph, changed_headers, result, manifest
-        )
+        self._propagate_dependency_changes(specs_by_id, graph, changed_headers, result, manifest)
 
         return result
 
