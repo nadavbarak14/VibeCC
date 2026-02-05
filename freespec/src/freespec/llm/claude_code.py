@@ -14,6 +14,8 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from collections.abc import Callable
 
+    from freespec.llm.session_logger import SessionLogger
+
 logger = logging.getLogger("freespec.llm")
 
 
@@ -45,6 +47,7 @@ class ClaudeCodeClient:
         working_dir: Path | str | None = None,
         log_dir: Path | str | None = None,
         stream_output: bool = False,
+        session_logger: SessionLogger | None = None,
     ) -> None:
         """Initialize the Claude Code client.
 
@@ -53,17 +56,41 @@ class ClaudeCodeClient:
             working_dir: Working directory for CLI commands.
             log_dir: Directory to save compilation logs. If None, no logs saved.
             stream_output: If True, print Claude output to stderr in real-time.
+            session_logger: Optional session logger for comprehensive logging.
         """
         self.timeout = timeout
         self.working_dir = Path(working_dir) if working_dir else Path.cwd()
         self.log_dir = Path(log_dir) if log_dir else None
         self.stream_output = stream_output
+        self.session_logger = session_logger
         self.log_callback: Callable[[str], None] | None = None
         self._current_spec_id: str | None = None
+        self._current_phase: str = "other"
+        self._current_attempt: int | None = None
 
     def set_current_spec(self, spec_id: str) -> None:
         """Set the current spec being compiled (for log file naming)."""
         self._current_spec_id = spec_id
+        if self.session_logger:
+            self.session_logger.set_current_spec(spec_id)
+
+    def set_current_phase(self, phase: str) -> None:
+        """Set the current phase (header, impl, review, fix).
+
+        Args:
+            phase: The current compilation phase.
+        """
+        self._current_phase = phase
+        if self.session_logger:
+            self.session_logger.set_current_phase(phase)
+
+    def set_current_attempt(self, attempt: int | None) -> None:
+        """Set the current attempt number for retries.
+
+        Args:
+            attempt: The current attempt number, or None if not in a retry loop.
+        """
+        self._current_attempt = attempt
 
     def generate(self, prompt: str, session_id: str | None = None) -> GenerationResult:
         """Generate code using Claude Code CLI.
@@ -124,6 +151,14 @@ class ClaudeCodeClient:
 
         is_resume = session_id is not None and not fork
 
+        # Determine interaction type for logging
+        if fork:
+            interaction_type = "fork"
+        elif is_resume:
+            interaction_type = "resume"
+        else:
+            interaction_type = "generate"
+
         try:
             result = self._run_claude(
                 prompt, effective_session_id, is_resume, fork, parent_session_id
@@ -135,6 +170,20 @@ class ClaudeCodeClient:
             if self.log_dir:
                 log_file = self._save_log(prompt, result, duration)
                 result.log_file = log_file
+
+            # Log to session logger if configured
+            if self.session_logger:
+                self.session_logger.log_interaction(
+                    interaction_type=interaction_type,
+                    prompt=prompt,
+                    output=result.output,
+                    success=result.success,
+                    error=result.error,
+                    duration_seconds=duration,
+                    session_id=effective_session_id,
+                    parent_session_id=parent_session_id,
+                    attempt=self._current_attempt,
+                )
 
             return result
         except subprocess.TimeoutExpired as e:
@@ -156,6 +205,18 @@ class ClaudeCodeClient:
             )
             if self.log_dir:
                 result.log_file = self._save_log(prompt, result, duration)
+            if self.session_logger:
+                self.session_logger.log_interaction(
+                    interaction_type=interaction_type,
+                    prompt=prompt,
+                    output=output,
+                    success=False,
+                    error=result.error,
+                    duration_seconds=duration,
+                    session_id=effective_session_id,
+                    parent_session_id=parent_session_id,
+                    attempt=self._current_attempt,
+                )
             return result
         except FileNotFoundError:
             duration = time.time() - start_time
@@ -169,6 +230,18 @@ class ClaudeCodeClient:
             )
             if self.log_dir:
                 result.log_file = self._save_log(prompt, result, duration)
+            if self.session_logger:
+                self.session_logger.log_interaction(
+                    interaction_type=interaction_type,
+                    prompt=prompt,
+                    output="",
+                    success=False,
+                    error=result.error,
+                    duration_seconds=duration,
+                    session_id=effective_session_id,
+                    parent_session_id=parent_session_id,
+                    attempt=self._current_attempt,
+                )
             return result
         except OSError as e:
             duration = time.time() - start_time
@@ -182,6 +255,18 @@ class ClaudeCodeClient:
             )
             if self.log_dir:
                 result.log_file = self._save_log(prompt, result, duration)
+            if self.session_logger:
+                self.session_logger.log_interaction(
+                    interaction_type=interaction_type,
+                    prompt=prompt,
+                    output="",
+                    success=False,
+                    error=result.error,
+                    duration_seconds=duration,
+                    session_id=effective_session_id,
+                    parent_session_id=parent_session_id,
+                    attempt=self._current_attempt,
+                )
             return result
 
     def _save_log(self, prompt: str, result: GenerationResult, duration: float) -> Path:

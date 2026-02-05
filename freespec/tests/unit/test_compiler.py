@@ -33,12 +33,15 @@ def make_config(tmp_path: Path) -> FreeSpecConfig:
     return FreeSpecConfig(
         name="test-project",
         version="1.0",
-        language="python",
         specs=["**/*.spec"],
         output=OutputConfig(out="out/"),
         settings=SettingsConfig(),
         root_path=tmp_path,
     )
+
+
+# Default language for tests
+TEST_LANGUAGE = "python"
 
 
 class TestCompileResult:
@@ -142,9 +145,9 @@ class TestIndependentCompiler:
         spec = make_spec("student", "entities")
 
         compiler = IndependentCompiler()
-        path = compiler._get_impl_path(spec, config)
+        path = compiler._get_impl_path(spec, config, TEST_LANGUAGE)
 
-        assert path == tmp_path / "out/src/entities/student.py"
+        assert path == tmp_path / "out/python/src/entities/student.py"
 
     def test_get_impl_path_api(self, tmp_path: Path) -> None:
         """Should generate correct path for API implementations."""
@@ -152,9 +155,9 @@ class TestIndependentCompiler:
         spec = make_spec("auth", "api")
 
         compiler = IndependentCompiler()
-        path = compiler._get_impl_path(spec, config)
+        path = compiler._get_impl_path(spec, config, TEST_LANGUAGE)
 
-        assert path == tmp_path / "out/src/api/auth.py"
+        assert path == tmp_path / "out/python/src/api/auth.py"
 
     def test_get_test_path(self, tmp_path: Path) -> None:
         """Should generate correct path for test files."""
@@ -162,9 +165,9 @@ class TestIndependentCompiler:
         spec = make_spec("student", "entities")
 
         compiler = IndependentCompiler()
-        path = compiler._get_test_path(spec, config)
+        path = compiler._get_test_path(spec, config, TEST_LANGUAGE)
 
-        assert path == tmp_path / "out/tests/entities/test_student.py"
+        assert path == tmp_path / "out/python/tests/entities/test_student.py"
 
     def test_filter_headers_for_spec_with_mentions(self) -> None:
         """Should filter headers to only @mentioned ones."""
@@ -238,14 +241,14 @@ class TestIndependentCompiler:
         context = CompileContext(config=config, all_headers=all_headers)
 
         # Create the expected output paths
-        impl_path = compiler._get_impl_path(spec, config)
-        test_path = compiler._get_test_path(spec, config)
+        impl_path = compiler._get_impl_path(spec, config, TEST_LANGUAGE)
+        test_path = compiler._get_test_path(spec, config, TEST_LANGUAGE)
         impl_path.parent.mkdir(parents=True, exist_ok=True)
         test_path.parent.mkdir(parents=True, exist_ok=True)
         impl_path.write_text("class Student: pass")
         test_path.write_text("def test_student(): pass")
 
-        result = compiler.compile_file(spec, context)
+        result = compiler.compile_file(spec, context, TEST_LANGUAGE)
 
         assert result.success is True
         assert result.spec_id == "entities/student"
@@ -281,14 +284,14 @@ class TestIndependentCompiler:
         )
         context = CompileContext(config=config, all_headers=all_headers)
 
-        impl_path = compiler._get_impl_path(spec, config)
-        test_path = compiler._get_test_path(spec, config)
+        impl_path = compiler._get_impl_path(spec, config, TEST_LANGUAGE)
+        test_path = compiler._get_test_path(spec, config, TEST_LANGUAGE)
         impl_path.parent.mkdir(parents=True, exist_ok=True)
         test_path.parent.mkdir(parents=True, exist_ok=True)
         impl_path.write_text("class Student: pass")
         test_path.write_text("def test_student(): pass")
 
-        result = compiler.compile_file(spec, context)
+        result = compiler.compile_file(spec, context, TEST_LANGUAGE)
 
         assert result.success is False
         assert "Review failed" in result.error
@@ -322,14 +325,14 @@ class TestIndependentCompiler:
         )
         context = CompileContext(config=config, all_headers=all_headers)
 
-        impl_path = compiler._get_impl_path(spec, config)
-        test_path = compiler._get_test_path(spec, config)
+        impl_path = compiler._get_impl_path(spec, config, TEST_LANGUAGE)
+        test_path = compiler._get_test_path(spec, config, TEST_LANGUAGE)
         impl_path.parent.mkdir(parents=True, exist_ok=True)
         test_path.parent.mkdir(parents=True, exist_ok=True)
         impl_path.write_text("class Student: pass")
         test_path.write_text("def test_student(): pass")
 
-        result = compiler.compile_file(spec, context)
+        result = compiler.compile_file(spec, context, TEST_LANGUAGE)
 
         assert result.success is False
         # Error should mention tests failed, not review
@@ -363,14 +366,14 @@ class TestIndependentCompiler:
         )
         context = CompileContext(config=config, all_headers=all_headers)
 
-        impl_path = compiler._get_impl_path(spec, config)
-        test_path = compiler._get_test_path(spec, config)
+        impl_path = compiler._get_impl_path(spec, config, TEST_LANGUAGE)
+        test_path = compiler._get_test_path(spec, config, TEST_LANGUAGE)
         impl_path.parent.mkdir(parents=True, exist_ok=True)
         test_path.parent.mkdir(parents=True, exist_ok=True)
         impl_path.write_text("class Student: pass")
         test_path.write_text("def test_student(): pass")
 
-        result = compiler.compile_file(spec, context)
+        result = compiler.compile_file(spec, context, TEST_LANGUAGE)
 
         assert result.success is True
         assert result.review_passed is True
@@ -402,14 +405,14 @@ class TestIndependentCompiler:
         )
         context = CompileContext(config=config, all_headers=all_headers)
 
-        impl_path = compiler._get_impl_path(spec, config)
-        test_path = compiler._get_test_path(spec, config)
+        impl_path = compiler._get_impl_path(spec, config, TEST_LANGUAGE)
+        test_path = compiler._get_test_path(spec, config, TEST_LANGUAGE)
         impl_path.parent.mkdir(parents=True, exist_ok=True)
         test_path.parent.mkdir(parents=True, exist_ok=True)
         impl_path.write_text("class Student: pass")
         test_path.write_text("def test_student(): pass")
 
-        result = compiler.compile_file(spec, context)
+        result = compiler.compile_file(spec, context, TEST_LANGUAGE)
 
         assert result.success is True
         assert result.review_passed is True
@@ -437,7 +440,7 @@ class TestIndependentCompiler:
         compiler = IndependentCompiler(client=mock_client)
         context = CompileContext(config=config, all_headers=all_headers)
 
-        result = compiler.compile_file(spec, context)
+        result = compiler.compile_file(spec, context, TEST_LANGUAGE)
 
         assert result.success is False
         assert "Generation failed" in result.error
@@ -464,14 +467,14 @@ class TestIndependentCompiler:
         )
         context = CompileContext(config=config, all_headers=all_headers)
 
-        impl_path = compiler._get_impl_path(spec, config)
-        test_path = compiler._get_test_path(spec, config)
+        impl_path = compiler._get_impl_path(spec, config, TEST_LANGUAGE)
+        test_path = compiler._get_test_path(spec, config, TEST_LANGUAGE)
         impl_path.parent.mkdir(parents=True, exist_ok=True)
         test_path.parent.mkdir(parents=True, exist_ok=True)
         impl_path.write_text("class Student: pass")
         test_path.write_text("def test_student(): pass")
 
-        compiler.compile_file(spec, context)
+        compiler.compile_file(spec, context, TEST_LANGUAGE)
 
         # First call is without session_id (new session)
         first_call = mock_client.generate.call_args_list[0]
@@ -493,8 +496,8 @@ class TestIndependentCompiler:
             "entities/course": "class Course: pass",
         }
 
-        # Create the dependency file on disk (in out/src/ directory)
-        src_dir = config.get_src_path()
+        # Create the dependency file on disk (in out/{language}/src/ directory)
+        src_dir = config.get_src_path(TEST_LANGUAGE)
         student_file = src_dir / "entities" / "student.py"
         student_file.parent.mkdir(parents=True, exist_ok=True)
         student_file.write_text("class Student: pass")
@@ -519,14 +522,14 @@ class TestIndependentCompiler:
         )
         context = CompileContext(config=config, all_headers=all_headers)
 
-        impl_path = compiler._get_impl_path(spec, config)
-        test_path = compiler._get_test_path(spec, config)
+        impl_path = compiler._get_impl_path(spec, config, TEST_LANGUAGE)
+        test_path = compiler._get_test_path(spec, config, TEST_LANGUAGE)
         impl_path.parent.mkdir(parents=True, exist_ok=True)
         test_path.parent.mkdir(parents=True, exist_ok=True)
         impl_path.write_text("code")
         test_path.write_text("test")
 
-        compiler.compile_file(spec, context)
+        compiler.compile_file(spec, context, TEST_LANGUAGE)
 
         # Verify dependency paths were passed (not content)
         call_kwargs = mock_builder.build_compile_prompt.call_args.kwargs
@@ -562,14 +565,14 @@ class TestIndependentCompiler:
 
         # Create all output directories and files
         for spec in specs:
-            impl_path = compiler._get_impl_path(spec, config)
-            test_path = compiler._get_test_path(spec, config)
+            impl_path = compiler._get_impl_path(spec, config, TEST_LANGUAGE)
+            test_path = compiler._get_test_path(spec, config, TEST_LANGUAGE)
             impl_path.parent.mkdir(parents=True, exist_ok=True)
             test_path.parent.mkdir(parents=True, exist_ok=True)
             impl_path.write_text("code")
             test_path.write_text("test")
 
-        context = compiler.compile_all(specs, config, all_headers)
+        context = compiler.compile_all(specs, config, all_headers, TEST_LANGUAGE)
 
         assert len(context.results) == 2
         assert len(context.passed) == 2
@@ -602,14 +605,14 @@ class TestIndependentCompiler:
         )
 
         # Create directories for first spec
-        impl_path = compiler._get_impl_path(specs[0], config)
-        test_path = compiler._get_test_path(specs[0], config)
+        impl_path = compiler._get_impl_path(specs[0], config, TEST_LANGUAGE)
+        test_path = compiler._get_test_path(specs[0], config, TEST_LANGUAGE)
         impl_path.parent.mkdir(parents=True, exist_ok=True)
         test_path.parent.mkdir(parents=True, exist_ok=True)
         impl_path.write_text("code")
         test_path.write_text("test")
 
-        context = compiler.compile_all(specs, config, all_headers, fail_fast=True)
+        context = compiler.compile_all(specs, config, all_headers, TEST_LANGUAGE, fail_fast=True)
 
         # Should only have tried the first spec
         assert len(context.results) == 1

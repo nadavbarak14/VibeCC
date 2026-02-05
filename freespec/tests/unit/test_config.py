@@ -18,7 +18,6 @@ def temp_config(tmp_path: Path) -> Path:
     config_content = dedent("""
         name: test-project
         version: "1.0"
-        language: python
 
         specs:
           - "**/*.spec"
@@ -44,7 +43,6 @@ class TestLoadConfig:
 
         assert config.name == "test-project"
         assert config.version == "1.0"
-        assert config.language == "python"
         assert config.specs == ["**/*.spec"]
 
     def test_load_output_config(self, temp_config: Path) -> None:
@@ -87,7 +85,6 @@ class TestLoadConfig:
             dedent("""
             name: minimal
             version: "1.0"
-            language: python
             specs:
               - "*.spec"
         """).strip()
@@ -110,13 +107,48 @@ class TestFreeSpecConfig:
 
         assert out_path == config.root_path / "out/"
 
+    def test_get_output_path_with_language(self, temp_config: Path) -> None:
+        config = load_config(temp_config)
+
+        out_path = config.get_output_path("python")
+
+        assert out_path == config.root_path / "out" / "python"
+
+    def test_get_src_path(self, temp_config: Path) -> None:
+        config = load_config(temp_config)
+
+        src_path = config.get_src_path("python")
+
+        assert src_path == config.root_path / "out" / "python" / "src/"
+
+    def test_get_tests_path(self, temp_config: Path) -> None:
+        config = load_config(temp_config)
+
+        tests_path = config.get_tests_path("cpp")
+
+        assert tests_path == config.root_path / "out" / "cpp" / "tests/"
+
+    def test_get_log_path(self, temp_config: Path) -> None:
+        config = load_config(temp_config)
+
+        log_path = config.get_log_path("python")
+
+        assert log_path == config.root_path / "logs" / "python" / "compile"
+
+    def test_get_manifest_path(self, temp_config: Path) -> None:
+        config = load_config(temp_config)
+
+        manifest_path = config.get_manifest_path("python")
+
+        assert manifest_path == config.root_path / "out" / "python" / ".freespec_build.json"
+
 
 class TestFindConfig:
     """Tests for find_config function."""
 
     def test_find_in_current_directory(self, tmp_path: Path) -> None:
         config_path = tmp_path / "freespec.yaml"
-        config_path.write_text("name: test\nversion: '1.0'\nlanguage: python\nspecs: []")
+        config_path.write_text("name: test\nversion: '1.0'\nspecs: []")
 
         found = find_config(tmp_path)
 
@@ -124,7 +156,7 @@ class TestFindConfig:
 
     def test_find_in_parent_directory(self, tmp_path: Path) -> None:
         config_path = tmp_path / "freespec.yaml"
-        config_path.write_text("name: test\nversion: '1.0'\nlanguage: python\nspecs: []")
+        config_path.write_text("name: test\nversion: '1.0'\nspecs: []")
 
         subdir = tmp_path / "sub" / "dir"
         subdir.mkdir(parents=True)

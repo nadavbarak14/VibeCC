@@ -67,12 +67,14 @@ class ImplementationGenerator:
         self,
         spec: SpecFile,
         context: ImplContext,
+        language: str,
     ) -> GeneratedImpl:
         """Generate an implementation file for a single spec.
 
         Args:
             spec: The spec to generate implementation for.
             context: Context with config and all headers.
+            language: Target language (python, cpp).
 
         Returns:
             The generated implementation file info.
@@ -80,12 +82,12 @@ class ImplementationGenerator:
         Raises:
             ImplementationError: If generation fails.
         """
-        output_path = self._get_impl_path(spec, context.config)
+        output_path = self._get_impl_path(spec, context.config, language)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         prompt = self.prompt_builder.build_impl_prompt(
             spec=spec,
-            language=context.config.language,
+            language=language,
             output_path=output_path,
             all_headers=context.all_headers,
         )
@@ -128,6 +130,7 @@ class ImplementationGenerator:
         specs: list[SpecFile],
         config: FreeSpecConfig,
         all_headers: dict[str, str],
+        language: str,
     ) -> ImplContext:
         """Generate implementations for all specs.
 
@@ -135,6 +138,7 @@ class ImplementationGenerator:
             specs: Specs to generate implementations for (any order).
             config: Project configuration.
             all_headers: Map of all spec_id to their header content.
+            language: Target language (python, cpp).
 
         Returns:
             Context with all generated implementations.
@@ -145,7 +149,7 @@ class ImplementationGenerator:
         context = ImplContext(config=config, all_headers=all_headers)
 
         for spec in specs:
-            self.generate_impl(spec, context)
+            self.generate_impl(spec, context, language)
 
         return context
 
@@ -168,21 +172,23 @@ class ImplementationGenerator:
         """
         return {m: all_headers[m] for m in spec.mentions if m in all_headers}
 
-    def _get_impl_path(self, spec: SpecFile, config: FreeSpecConfig) -> Path:
+    def _get_impl_path(self, spec: SpecFile, config: FreeSpecConfig, language: str) -> Path:
         """Determine output path for a spec's implementation file.
 
-        Implementations go to out/src/ directory (same location as headers):
-        specs/entities/student.spec → out/src/entities/student.py
+        Implementations go to out/{language}/src/ directory:
+        specs/entities/student.spec → out/python/src/entities/student.py
 
         Args:
             spec: The spec file.
             config: Project configuration.
+            language: Target language (python, cpp).
 
         Returns:
             Path where implementation file should be written.
         """
-        base = config.get_src_path()
-        return base / spec.category / f"{spec.name}.py"
+        ext = ".py" if language.lower() == "python" else ".cpp"
+        base = config.get_src_path(language)
+        return base / spec.category / f"{spec.name}{ext}"
 
     def _extract_code_from_output(self, output: str) -> str | None:
         """Try to extract code from LLM output if file wasn't written.

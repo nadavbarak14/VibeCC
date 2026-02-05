@@ -23,9 +23,14 @@ from freespec.generator.runner import PytestRunner, RunnerError
 from freespec.generator.stubs import GenerationError
 from freespec.generator.tests import SkeletonGenError, SkeletonTestGenerator
 from freespec.llm.claude_code import ClaudeCodeClient
+from freespec.llm.session_logger import SessionLogger
 from freespec.parser.dependency import DependencyResolver
 from freespec.parser.spec_parser import ParseError, SpecParser
+from freespec.rebuild.detector import RebuildDetector
 from freespec.verifier.imports import ImportVerifier
+
+# Valid language options
+VALID_LANGUAGES = ("python", "cpp", "c++")
 
 
 def setup_logging(verbose: bool) -> None:
@@ -57,12 +62,19 @@ def main() -> None:
     help="Path to freespec.yaml (auto-detected if not specified)",
 )
 @click.option(
+    "--lang",
+    "language",
+    type=click.Choice(["python", "cpp"], case_sensitive=False),
+    default="python",
+    help="Target language (default: python)",
+)
+@click.option(
     "-v",
     "--verbose",
     is_flag=True,
     help="Enable verbose output",
 )
-def headers(config_path: Path | None, verbose: bool) -> None:
+def headers(config_path: Path | None, language: str, verbose: bool) -> None:
     """Generate header/interface files (Pass 1).
 
     Headers are generated independently without dependency ordering.
@@ -77,6 +89,7 @@ def headers(config_path: Path | None, verbose: bool) -> None:
             config_path = find_config()
         config = load_config(config_path)
         click.echo(f"  Project: {config.name} v{config.version}")
+        click.echo(f"  Language: {language}")
 
         # Parse spec files
         click.echo("\nParsing spec files...")
@@ -115,10 +128,10 @@ def headers(config_path: Path | None, verbose: bool) -> None:
         # Generate headers
         click.echo("\nGenerating headers (Pass 1)...")
         generator = HeaderGenerator(client=client)
-        context = generator.generate_all_headers(specs, config)
+        context = generator.generate_all_headers(specs, config, language)
 
         click.echo(f"  Generated {len(context.generated_files)} header files")
-        click.echo(f"\nHeaders written to: {config.get_src_path()}")
+        click.echo(f"\nHeaders written to: {config.get_src_path(language)}")
 
     except ConfigError as e:
         click.echo(f"Configuration error: {e}", err=True)
@@ -140,6 +153,13 @@ def headers(config_path: Path | None, verbose: bool) -> None:
     help="Path to freespec.yaml (auto-detected if not specified)",
 )
 @click.option(
+    "--lang",
+    "language",
+    type=click.Choice(["python", "cpp"], case_sensitive=False),
+    default="python",
+    help="Target language (default: python)",
+)
+@click.option(
     "--no-verify",
     is_flag=True,
     help="Skip import verification",
@@ -150,7 +170,7 @@ def headers(config_path: Path | None, verbose: bool) -> None:
     is_flag=True,
     help="Enable verbose output",
 )
-def impl(config_path: Path | None, no_verify: bool, verbose: bool) -> None:
+def impl(config_path: Path | None, language: str, no_verify: bool, verbose: bool) -> None:
     """Generate implementation files (Pass 2).
 
     Requires headers to be generated first. Uses all headers as context
@@ -165,10 +185,11 @@ def impl(config_path: Path | None, no_verify: bool, verbose: bool) -> None:
             config_path = find_config()
         config = load_config(config_path)
         click.echo(f"  Project: {config.name} v{config.version}")
+        click.echo(f"  Language: {language}")
 
         # Load existing headers
         click.echo("\nLoading headers...")
-        all_headers = load_headers(config)
+        all_headers = load_headers(config, language)
         if not all_headers:
             click.echo("  Error: No headers found. Run 'freespec headers' first.", err=True)
             sys.exit(1)
@@ -197,7 +218,7 @@ def impl(config_path: Path | None, no_verify: bool, verbose: bool) -> None:
         # Generate implementations
         click.echo("\nGenerating implementations (Pass 2)...")
         generator = ImplementationGenerator(client=client)
-        context = generator.generate_all_impls(specs, config, all_headers)
+        context = generator.generate_all_impls(specs, config, all_headers, language)
 
         click.echo(f"  Generated {len(context.generated_files)} implementation files")
 
@@ -206,7 +227,7 @@ def impl(config_path: Path | None, no_verify: bool, verbose: bool) -> None:
             click.echo("\nVerifying imports...")
             verifier = ImportVerifier()
             impl_paths = [f.path for f in context.generated_files]
-            result = verifier.verify_cross_imports(impl_paths, config.get_src_path())
+            result = verifier.verify_cross_imports(impl_paths, config.get_src_path(language))
 
             if result.success:
                 click.echo("  All imports verified successfully")
@@ -217,7 +238,7 @@ def impl(config_path: Path | None, no_verify: bool, verbose: bool) -> None:
                     click.echo(f"    - {error.file_path}{line_info}: {error.error}", err=True)
                 sys.exit(1)
 
-        click.echo(f"\nImplementations written to: {config.get_src_path()}")
+        click.echo(f"\nImplementations written to: {config.get_src_path(language)}")
 
     except ConfigError as e:
         click.echo(f"Configuration error: {e}", err=True)
@@ -239,6 +260,13 @@ def impl(config_path: Path | None, no_verify: bool, verbose: bool) -> None:
     help="Path to freespec.yaml (auto-detected if not specified)",
 )
 @click.option(
+    "--lang",
+    "language",
+    type=click.Choice(["python", "cpp"], case_sensitive=False),
+    default="python",
+    help="Target language (default: python)",
+)
+@click.option(
     "--from-headers",
     is_flag=True,
     help="Generate tests from headers instead of implementations (TDD workflow)",
@@ -249,7 +277,7 @@ def impl(config_path: Path | None, no_verify: bool, verbose: bool) -> None:
     is_flag=True,
     help="Enable verbose output",
 )
-def tests(config_path: Path | None, from_headers: bool, verbose: bool) -> None:
+def tests(config_path: Path | None, language: str, from_headers: bool, verbose: bool) -> None:
     """Generate test skeleton files.
 
     By default, generates tests from implementation files.
@@ -264,18 +292,19 @@ def tests(config_path: Path | None, from_headers: bool, verbose: bool) -> None:
             config_path = find_config()
         config = load_config(config_path)
         click.echo(f"  Project: {config.name} v{config.version}")
+        click.echo(f"  Language: {language}")
 
         # Load source code (headers or implementations)
         if from_headers:
             click.echo("\nLoading headers for test generation...")
-            source_code = load_headers(config)
+            source_code = load_headers(config, language)
             if not source_code:
                 click.echo("  Error: No headers found. Run 'freespec headers' first.", err=True)
                 sys.exit(1)
             click.echo(f"  Loaded {len(source_code)} headers")
         else:
             click.echo("\nLoading implementations for test generation...")
-            source_code = _load_implementations(config)
+            source_code = _load_implementations(config, language)
             if not source_code:
                 click.echo("  Error: No implementations. Run 'freespec impl' first.", err=True)
                 sys.exit(1)
@@ -304,10 +333,10 @@ def tests(config_path: Path | None, from_headers: bool, verbose: bool) -> None:
         # Generate tests
         click.echo("\nGenerating test skeletons...")
         generator = SkeletonTestGenerator(client=client)
-        context = generator.generate_all_tests(specs, config, source_code)
+        context = generator.generate_all_tests(specs, config, source_code, language)
 
         click.echo(f"  Generated {len(context.generated_files)} test files")
-        click.echo(f"\nTests written to: {config.get_tests_path()}")
+        click.echo(f"\nTests written to: {config.get_tests_path(language)}")
 
     except ConfigError as e:
         click.echo(f"Configuration error: {e}", err=True)
@@ -320,34 +349,38 @@ def tests(config_path: Path | None, from_headers: bool, verbose: bool) -> None:
         sys.exit(1)
 
 
-def _load_implementations(config: FreeSpecConfig) -> dict[str, str]:
+def _load_implementations(config: FreeSpecConfig, language: str) -> dict[str, str]:
     """Load all existing implementation files.
 
     Args:
         config: Project configuration.
+        language: Target language (python, cpp).
 
     Returns:
         Map of spec_id to implementation content.
     """
     impls: dict[str, str] = {}
 
+    # Determine file extension based on language
+    ext = ".py" if language.lower() == "python" else ".cpp"
+
     # Load from src directory (implementations are in same place as headers)
-    src_dir = config.get_src_path()
+    src_dir = config.get_src_path(language)
     if src_dir.exists():
-        for py_file in src_dir.rglob("*.py"):
-            if py_file.name == "__init__.py":
+        for impl_file in src_dir.rglob(f"*{ext}"):
+            if impl_file.name == "__init__.py":
                 continue
             # Skip test files
-            if py_file.name.startswith("test_"):
+            if impl_file.name.startswith("test_"):
                 continue
-            relative = py_file.relative_to(src_dir)
+            relative = impl_file.relative_to(src_dir)
             category = relative.parent.name if relative.parent.name else ""
-            name = py_file.stem
+            name = impl_file.stem
             if category:
                 spec_id = f"{category}/{name}"
             else:
                 spec_id = name
-            impls[spec_id] = py_file.read_text()
+            impls[spec_id] = impl_file.read_text()
 
     return impls
 
@@ -361,9 +394,21 @@ def _load_implementations(config: FreeSpecConfig) -> dict[str, str]:
     help="Path to freespec.yaml (auto-detected if not specified)",
 )
 @click.option(
+    "--lang",
+    "language",
+    type=click.Choice(["python", "cpp"], case_sensitive=False),
+    default="python",
+    help="Target language (default: python)",
+)
+@click.option(
     "--fail-fast",
     is_flag=True,
     help="Stop on first module failure",
+)
+@click.option(
+    "--force",
+    is_flag=True,
+    help="Force full rebuild, ignore manifest",
 )
 @click.option(
     "-v",
@@ -374,7 +419,7 @@ def _load_implementations(config: FreeSpecConfig) -> dict[str, str]:
 @click.option(
     "--dry-run",
     is_flag=True,
-    help="Parse and validate specs without generating code",
+    help="Show what would rebuild without generating code",
 )
 @click.option(
     "--skip-headers",
@@ -395,7 +440,9 @@ def _load_implementations(config: FreeSpecConfig) -> dict[str, str]:
 )
 def compile(
     config_path: Path | None,
+    language: str,
     fail_fast: bool,
+    force: bool,
     verbose: bool,
     dry_run: bool,
     skip_headers: bool,
@@ -404,9 +451,12 @@ def compile(
 ) -> None:
     """Compile .spec files using independent compilation (gcc model).
 
+    Supports incremental rebuilds - only recompiles specs that changed
+    or have dependencies that changed.
+
     Each file compiles independently:
-    - Pass 1: Generate all headers (interfaces)
-    - Pass 2: For each file:
+    - Pass 1: Generate headers (interfaces) for changed specs
+    - Pass 2: For each changed file:
         - Generate impl + tests together (impl sees only @mentioned headers)
         - Run tests with pytest
         - Retry with error feedback on failure
@@ -422,7 +472,7 @@ def compile(
             config_path = find_config()
         config = load_config(config_path)
         click.echo(f"  Project: {config.name} v{config.version}")
-        click.echo(f"  Language: {config.language}")
+        click.echo(f"  Language: {language}")
 
         # Stage 1: Parse spec files
         click.echo("\nStage 1: Parsing spec files...")
@@ -451,10 +501,11 @@ def compile(
         else:
             compile_specs = specs
 
-        # Validate dependencies (allow cycles)
+        # Build dependency graph and validate
         click.echo("\nValidating dependencies...")
         resolver = DependencyResolver()
-        _, missing_deps = resolver.get_all_specs(specs, validate=True)
+        graph = resolver.build_graph(specs)
+        missing_deps = resolver.validate_dependencies(graph)
 
         if missing_deps:
             click.echo("  Warning: Missing dependencies found:", err=True)
@@ -466,21 +517,46 @@ def compile(
         if cycles:
             click.echo(f"  Note: {len(cycles)} circular @mention(s) (allowed)")
 
-        if dry_run:
-            click.echo("\n[Dry run] Skipping code generation")
-            click.echo("Validation passed!")
+        # Stage 2: Detect what needs rebuilding
+        click.echo("\nStage 2: Detecting changes...")
+        detector = RebuildDetector(config, language)
+        detection = detector.detect_all(compile_specs, graph, force=force)
+
+        if detection.nothing_to_rebuild and not force:
+            click.echo("  Nothing to rebuild - all specs up to date")
+            click.echo("\nCompilation complete!")
             return
 
-        # Check Claude Code availability
+        # Report what will be rebuilt
+        _report_rebuild_plan(detection, verbose)
+
+        if dry_run:
+            click.echo("\n[Dry run] Skipping code generation")
+            return
+
         # Use default log dir if not specified
         if log_dir is None:
-            log_dir = config.root_path / "logs" / "compile"
+            log_dir = config.get_log_path(language)
         click.echo(f"\nLogs will be saved to: {log_dir}")
 
+        # Create session logger for comprehensive logging
+        import time
+        session_start_time = time.time()
+
+        session_logger = SessionLogger(
+            log_dir=log_dir,
+            project_name=config.name,
+            language=language,
+        )
+        text_log, json_log = session_logger.get_log_paths()
+        click.echo(f"Session log: {text_log}")
+
+        # Check Claude Code availability
         client = ClaudeCodeClient(
             working_dir=config.root_path,
             log_dir=log_dir,
             stream_output=verbose,
+            session_logger=session_logger,
         )
         if not client.check_available():
             click.echo("  Error: Claude Code CLI not available", err=True)
@@ -488,7 +564,7 @@ def compile(
             sys.exit(1)
 
         # Check test runner availability based on language
-        lang = config.language.lower()
+        lang = language.lower()
         if lang == "python":
             click.echo("\nChecking pytest availability...")
             runner = PytestRunner(working_dir=config.root_path)
@@ -508,64 +584,103 @@ def compile(
                 click.echo(f"  Error: {e}", err=True)
                 sys.exit(1)
 
-        # Stage 2: Generate or load headers (Pass 1)
+        # Stage 3: Generate or load headers (Pass 1)
         if skip_headers:
-            click.echo("\nStage 2: Loading existing headers...")
-            all_headers = load_headers(config)
+            click.echo("\nStage 3: Loading existing headers...")
+            all_headers = load_headers(config, language)
             if not all_headers:
                 click.echo("  Error: No headers found. Run without --skip-headers first.", err=True)
                 sys.exit(1)
             click.echo(f"  Loaded {len(all_headers)} existing headers")
         else:
-            click.echo("\nStage 2: Generating headers (Pass 1)...")
-            header_generator = HeaderGenerator(client=client)
-            header_context = header_generator.generate_all_headers(specs, config)
-            all_headers = header_context.headers
-            click.echo(f"  Generated {len(header_context.generated_files)} header files")
+            # Filter to specs needing header generation
+            header_specs = [s for s in specs if s.spec_id in detection.header_specs]
+            if header_specs:
+                click.echo(f"\nStage 3: Generating headers for {len(header_specs)} spec(s)...")
+                header_generator = HeaderGenerator(client=client)
+                header_context = header_generator.generate_all_headers(
+                    header_specs, config, language, detector=detector
+                )
+                all_headers = header_context.headers
+                click.echo(f"  Generated {len(header_context.generated_files)} header files")
+                # Also load existing headers for unchanged specs
+                existing_headers = load_headers(config, language)
+                all_headers.update(existing_headers)
+            else:
+                click.echo("\nStage 3: Loading existing headers (no changes needed)...")
+                all_headers = load_headers(config, language)
+                click.echo(f"  Loaded {len(all_headers)} existing headers")
 
-        # Stage 3: Independent compilation (Pass 2)
-        click.echo("\nStage 3: Independent compilation...")
-        click.echo(f"  Compiling {len(compile_specs)} spec(s)...")
-        compiler = IndependentCompiler(client=client)
-        compile_context = compiler.compile_all(
-            specs=compile_specs,
-            config=config,
-            all_headers=all_headers,
-            fail_fast=fail_fast,
+        # Stage 4: Independent compilation (Pass 2)
+        # Filter to specs needing implementation rebuild
+        impl_spec_ids = set(detection.impl_specs)
+        impl_specs = [s for s in compile_specs if s.spec_id in impl_spec_ids]
+
+        if impl_specs:
+            click.echo(f"\nStage 4: Independent compilation of {len(impl_specs)} spec(s)...")
+            compiler = IndependentCompiler(client=client)
+            compile_context = compiler.compile_all(
+                specs=impl_specs,
+                config=config,
+                all_headers=all_headers,
+                language=language,
+                fail_fast=fail_fast,
+                detector=detector,
+            )
+
+            # Report results
+            click.echo("\nCompilation Results:")
+            for result in compile_context.results:
+                status = "[PASS]" if result.success else "[FAIL]"
+                duration = f"({result.duration_seconds:.1f}s)" if result.duration_seconds else ""
+                click.echo(f"  {status} {result.spec_id} {duration}")
+                if result.log_file:
+                    click.echo(f"       Log: {result.log_file}")
+
+            # Summary
+            passed = len(compile_context.passed)
+            failed = len(compile_context.failed)
+            total = passed + failed
+            click.echo(f"\nSummary: {passed}/{total} modules compiled successfully")
+
+            if compile_context.failed:
+                click.echo("\nFailed modules:", err=True)
+                for result in compile_context.failed:
+                    click.echo(f"  - {result.spec_id}", err=True)
+                    if result.error and verbose:
+                        # Truncate long errors
+                        error_preview = result.error[:500]
+                        if len(result.error) > 500:
+                            error_preview += "..."
+                        click.echo(f"    Error: {error_preview}", err=True)
+                sys.exit(1)
+        else:
+            click.echo("\nStage 4: No implementations need rebuilding")
+            passed = 0
+            failed = 0
+
+        # Log session summary
+        session_duration = time.time() - session_start_time
+        session_logger.log_summary(
+            total_specs=len(impl_specs) if impl_specs else 0,
+            successful_specs=passed,
+            failed_specs=failed,
+            total_duration_seconds=session_duration,
+            extra={
+                "header_specs_rebuilt": len(detection.header_specs),
+                "impl_specs_rebuilt": len(detection.impl_specs),
+            },
         )
 
-        # Report results
-        click.echo("\nCompilation Results:")
-        for result in compile_context.results:
-            status = "[PASS]" if result.success else "[FAIL]"
-            duration = f"({result.duration_seconds:.1f}s)" if result.duration_seconds else ""
-            click.echo(f"  {status} {result.spec_id} {duration}")
-            if result.log_file:
-                click.echo(f"       Log: {result.log_file}")
-
-        # Summary
-        passed = len(compile_context.passed)
-        failed = len(compile_context.failed)
-        total = passed + failed
-        click.echo(f"\nSummary: {passed}/{total} modules compiled successfully")
-
-        if compile_context.failed:
-            click.echo("\nFailed modules:", err=True)
-            for result in compile_context.failed:
-                click.echo(f"  - {result.spec_id}", err=True)
-                if result.error and verbose:
-                    # Truncate long errors
-                    error_preview = result.error[:500]
-                    if len(result.error) > 500:
-                        error_preview += "..."
-                    click.echo(f"    Error: {error_preview}", err=True)
-            sys.exit(1)
+        # Save manifest
+        detector.save_manifest()
 
         click.echo("\nCompilation complete!")
         click.echo("Output written to:")
-        click.echo(f"  Source: {config.get_src_path()}")
-        click.echo(f"  Tests: {config.get_tests_path()}")
+        click.echo(f"  Source: {config.get_src_path(language)}")
+        click.echo(f"  Tests: {config.get_tests_path(language)}")
         click.echo(f"  Logs: {log_dir}")
+        click.echo(f"  Manifest: {config.get_manifest_path(language)}")
 
     except ConfigError as e:
         click.echo(f"Configuration error: {e}", err=True)
@@ -588,6 +703,42 @@ def compile(
     except CppRunnerError as e:
         click.echo(f"C++ runner error: {e}", err=True)
         sys.exit(1)
+
+
+def _report_rebuild_plan(detection, verbose: bool) -> None:
+    """Report what will be rebuilt.
+
+    Args:
+        detection: Detection result from RebuildDetector.
+        verbose: Show detailed reasons.
+    """
+    total = detection.total_specs
+    rebuild_count = len(detection.impl_specs)
+
+    if rebuild_count == 0:
+        click.echo("  Nothing to rebuild")
+        return
+
+    click.echo(f"  Would rebuild {rebuild_count} of {total} specs:")
+
+    for spec_id in detection.impl_specs:
+        info = detection.rebuild_info.get(spec_id)
+        if info:
+            reasons = [r.value for r in info.reasons]
+            reason_str = ", ".join(reasons)
+
+            # Determine what needs to be done
+            if info.needs_header and info.needs_impl:
+                action = "header + impl"
+            elif info.needs_header:
+                action = "header"
+            else:
+                action = "impl"
+
+            click.echo(f"    {spec_id} ({reason_str} -> {action})")
+
+            if verbose and info.triggering_deps:
+                click.echo(f"      Triggered by: {', '.join(info.triggering_deps)}")
 
 
 @main.command()
