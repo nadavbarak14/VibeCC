@@ -333,9 +333,14 @@ class HeaderGenerator:
                 continue
 
             # Run review
-            logger.info("  Reviewing header (attempt %d/%d)...", attempt + 1, MAX_HEADER_REVIEW_RETRIES)
+            logger.info(
+                "  Reviewing header (attempt %d/%d)...",
+                attempt + 1, MAX_HEADER_REVIEW_RETRIES
+            )
             self.client.set_current_phase("review")
-            review_prompt = self.prompt_builder.build_header_review_prompt(spec, output_path)
+            review_prompt = self.prompt_builder.build_header_review_prompt(
+                spec, output_path
+            )
             review_result = self.client.generate(review_prompt, forked_session_id)
 
             if "REVIEW_PASSED" in review_result.output:
@@ -354,7 +359,10 @@ class HeaderGenerator:
 
             # Review failed - Claude was already told to fix issues in the review prompt
             last_failure_reason = f"Review failed: {review_result.output[:500]}"
-            logger.info("  Header review failed (attempt %d/%d)", attempt + 1, MAX_HEADER_REVIEW_RETRIES)
+            logger.info(
+                "  Header review failed (attempt %d/%d)",
+                attempt + 1, MAX_HEADER_REVIEW_RETRIES
+            )
 
         # All retries exhausted - return whatever we have but log warning
         logger.warning(

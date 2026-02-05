@@ -101,10 +101,10 @@ class PromptBuilder:
                 [
                     "## CRITICAL RULES - FOLLOW EXACTLY",
                     "",
-                    "1. **NO ABSTRACT CLASSES**: Never use ABC, abstractmethod, or Protocol",
-                    "2. **ONLY EXPORTS**: Include ONLY what's in the `exports:` section - nothing else",
-                    "3. **CONCRETE CLASSES**: All classes must be concrete with NotImplementedError()",
-                    "4. **NO EXTRA CODE**: Don't add helper classes, utility functions, or extra types",
+                    "1. **NO ABSTRACT CLASSES**: Never use ABC, abstractmethod, Protocol",
+                    "2. **ONLY EXPORTS**: Include ONLY what's in `exports:` - nothing else",
+                    "3. **CONCRETE CLASSES**: All classes concrete with NotImplementedError()",
+                    "4. **NO EXTRA CODE**: No helper classes, utility functions, extra types",
                     "",
                     "## Requirements:",
                     "- Each export becomes a function or method that can be imported and called",
@@ -482,9 +482,13 @@ class PromptBuilder:
                     dep_module = ".".join(dep_parts[src_idx:-1] + (path.stem,))
                 else:
                     dep_module = f"src.{spec_id.replace('/', '.')}"
-                prompt_parts.append(f"- **{spec_id}**: READ `{path}` first, then `from {dep_module} import ...`")
+                prompt_parts.append(
+                    f"- **{spec_id}**: READ `{path}` → `from {dep_module} import ...`"
+                )
             prompt_parts.append("")
-            prompt_parts.append("If you use a field that doesn't exist in the dependency → compilation FAILS")
+            prompt_parts.append(
+                "If you use a field that doesn't exist in dependency → FAILS"
+            )
             prompt_parts.append("")
 
         prompt_parts.extend(
@@ -600,8 +604,8 @@ class PromptBuilder:
                     "",
                     "Private names (starting with `_`) are allowed and don't count as exports.",
                     "",
-                    "If exports don't match EXACTLY, report REVIEW_FAILED and FIX the implementation",
-                    "to match the original exports. Do NOT add new public classes or functions.",
+                    "If exports don't match, report REVIEW_FAILED and FIX it",
+                    "to match original exports. Do NOT add new public classes/functions.",
                     "",
                 ]
             )
@@ -870,7 +874,7 @@ class PromptBuilder:
                 "1. **ABSTRACT CLASSES**: ABC, abstractmethod, Protocol - FAIL",
                 "2. **EXTRA EXPORTS**: Classes/functions NOT in the exports list - FAIL",
                 "3. **MISSING EXPORTS**: Exports from spec not in header - FAIL",
-                "4. **NON-STUB METHODS**: Methods with real implementation (not NotImplementedError) - FAIL",
+                "4. **NON-STUB METHODS**: Methods with real impl (not NotImplementedError) - FAIL",
                 "5. **EXTRA TYPES**: TypedDicts, Protocols, helper classes not needed - FAIL",
                 "",
                 "## Your Task",
