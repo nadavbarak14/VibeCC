@@ -7,9 +7,9 @@ generated C++ code compiles with g++ and behaves correctly.
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 
 import pytest
-from pathlib import Path
 
 from freespec.generator.cpp_runner import CppTestRunner
 from freespec.generator.prompts import PromptBuilder
