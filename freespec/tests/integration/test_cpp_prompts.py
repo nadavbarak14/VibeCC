@@ -149,10 +149,7 @@ def make_service_spec() -> SpecFile:
         ),
         tests=Section(
             "tests",
-            (
-                "- Resetting sets value to zero\n"
-                "- Status reports the current value"
-            ),
+            ("- Resetting sets value to zero\n- Status reports the current value"),
         ),
         mentions=["entities/counter"],
     )
@@ -173,12 +170,8 @@ class TestCppPromptsRealClaude:
         """Create a PromptBuilder with mock docs."""
         docs_path = tmp_path / "docs"
         docs_path.mkdir()
-        (docs_path / "instructions.md").write_text(
-            "# Instructions\nFreeSpec instructions"
-        )
-        (docs_path / "spec-format.md").write_text(
-            "# Spec Format\nFormat reference"
-        )
+        (docs_path / "instructions.md").write_text("# Instructions\nFreeSpec instructions")
+        (docs_path / "spec-format.md").write_text("# Spec Format\nFormat reference")
         return PromptBuilder(docs_path=docs_path)
 
     @pytest.fixture
@@ -198,9 +191,7 @@ class TestCppPromptsRealClaude:
         spec = make_counter_spec()
         output_path = tmp_path / "counter.hpp"
 
-        prompt = builder.build_header_prompt(
-            spec, language="cpp", output_path=output_path
-        )
+        prompt = builder.build_header_prompt(spec, language="cpp", output_path=output_path)
         result = client.generate(prompt)
 
         assert result.success, f"Claude failed: {result.error}\n{result.output}"
@@ -227,9 +218,7 @@ class TestCppPromptsRealClaude:
             text=True,
             timeout=30,
         )
-        assert compile_result.returncode == 0, (
-            f"Header failed to compile:\n{compile_result.stderr}"
-        )
+        assert compile_result.returncode == 0, f"Header failed to compile:\n{compile_result.stderr}"
 
     # ----- Test 2: header instructions then fork generates .hpp -----
 
@@ -259,9 +248,7 @@ class TestCppPromptsRealClaude:
             f"```\n{spec.full_content}\n```"
         )
         fork_result = client.fork_session(base_result.session_id, fork_prompt)
-        assert fork_result.success, (
-            f"Fork failed: {fork_result.error}\n{fork_result.output}"
-        )
+        assert fork_result.success, f"Fork failed: {fork_result.error}\n{fork_result.output}"
         assert output_path.exists(), "Header file was not written by fork"
 
         content = output_path.read_text()
@@ -278,9 +265,7 @@ class TestCppPromptsRealClaude:
             text=True,
             timeout=30,
         )
-        assert compile_result.returncode == 0, (
-            f"Header failed to compile:\n{compile_result.stderr}"
-        )
+        assert compile_result.returncode == 0, f"Header failed to compile:\n{compile_result.stderr}"
 
     # ----- Test 3: compile prompt generates working .cpp -----
 
@@ -387,12 +372,8 @@ class TestCppPromptsRealClaude:
         impl_content = impl_path.read_text()
 
         # Must use #include, not Python imports
-        assert "#include" in impl_content, (
-            f"Impl missing #include directive:\n{impl_content}"
-        )
-        assert "from " not in impl_content, (
-            f"Impl contains Python 'from' import:\n{impl_content}"
-        )
+        assert "#include" in impl_content, f"Impl missing #include directive:\n{impl_content}"
+        assert "from " not in impl_content, f"Impl contains Python 'from' import:\n{impl_content}"
         assert "import " not in impl_content, (
             f"Impl contains Python 'import' statement:\n{impl_content}"
         )
