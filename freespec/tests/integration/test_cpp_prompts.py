@@ -16,7 +16,6 @@ from freespec.generator.prompts import PromptBuilder
 from freespec.llm.claude_code import ClaudeCodeClient
 from freespec.parser.models import Section, SpecFile
 
-
 # ---------------------------------------------------------------------------
 # Skip markers
 # ---------------------------------------------------------------------------
